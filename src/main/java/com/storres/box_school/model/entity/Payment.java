@@ -16,6 +16,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import lombok.Getter;
 import lombok.Setter;
+
 @Getter
 @Setter
 @Entity
@@ -31,13 +32,18 @@ public class Payment {
     @Column(name = "period_start")
     private LocalDate periodStart;
     @NotNull
-    @Column(name = "period_End")
+    @Column(name = "period_end")
     private LocalDate periodEnd;
     @NotNull
     @Column(precision = 19, scale = 2)
     @Positive
-    private BigDecimal amount;
-@ManyToOne(fetch = FetchType.LAZY)
-@JoinColumn(name = "student_id", nullable = false)
-private Student student;
+    private BigDecimal amountPaid;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "student_id", nullable = false)
+    private Student student;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "price_id", nullable = false)
+    private Price price;
+
 }

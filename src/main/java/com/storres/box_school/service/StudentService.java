@@ -17,5 +17,12 @@ public interface StudentService {
 
      List<StudentResponse> findStudentsWithExpireMembership();
 
+     StudentResponse updateStudent (Long id , StudentRequest info);
+
+     StudentResponse desactiveStudent(Long id);
+
+     StudentResponse activeStudent(Long id);
+     
+
 
 }

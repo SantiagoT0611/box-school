@@ -9,10 +9,6 @@ import com.storres.box_school.model.entity.Student;
 @Component
 public class StudentMapper {
 
-    private StudentMapper() {
-
-    }
-
     public Student toEntity(StudentRequest info) {
         var response = new Student();
         response.setFirstName(info.getFirstName());
