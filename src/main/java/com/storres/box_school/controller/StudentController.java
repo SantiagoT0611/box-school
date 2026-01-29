@@ -62,7 +62,7 @@ public class StudentController {
         return studentService.desactiveStudent(id);
     }
 
-    @PatchMapping("/{id}?active")
+    @PatchMapping("/{id}active")
     public StudentResponse activeStudents(@PathVariable Long id) {
         return studentService.activeStudent(id);
     }

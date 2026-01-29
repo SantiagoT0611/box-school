@@ -14,6 +14,7 @@ public class PriceMapper {
         response.setType(info.getType());
         response.setAmount(info.getAmount());
         response.setDurationDays(info.getDurationDays());
+        
 
         return response;
 

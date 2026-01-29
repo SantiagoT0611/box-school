@@ -12,6 +12,8 @@ import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 
 import com.storres.box_school.exception.EmailAlreadyExistsException;
+import com.storres.box_school.exception.PriceActiveNotFoundException;
+import com.storres.box_school.exception.StudentNotActiveException;
 import com.storres.box_school.exception.StudentNotFoundExcepcion;
 import com.storres.box_school.model.dto.ApiErrorResponse;
 
@@ -34,6 +36,31 @@ public class GlobalExceptionHandler {
                         .stream()
                         .collect(Collectors.toMap(er -> er.getField(), er -> er.getDefaultMessage())));
         return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(PriceActiveNotFoundException.class)
+    public ResponseEntity<ApiErrorResponse> handlePriceActiveNotFoundException(PriceActiveNotFoundException ex) {
+        log.warn("No fue encontrado un precio activo");
+        var response = new ApiErrorResponse();
+        response.setTimestamp(LocalDateTime.now());
+        response.setCode(HttpStatus.BAD_REQUEST.value());
+        response.setMessage(ex.getMessage());
+        response.setErrors(null);
+
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
+    }
+
+    @ExceptionHandler(StudentNotActiveException.class)
+    public ResponseEntity<ApiErrorResponse> handleStudentNotActiveException(StudentNotActiveException ex) {
+        log.warn("Estudiante con estado inactivo");
+        var response = new ApiErrorResponse();
+        response.setTimestamp(LocalDateTime.now());
+        response.setCode(HttpStatus.BAD_REQUEST.value());
+        response.setMessage(ex.getMessage());
+        response.setErrors(null);
+
+        return ResponseEntity.badRequest().body(response);
+
     }
 
     @ExceptionHandler(EmailAlreadyExistsException.class)
