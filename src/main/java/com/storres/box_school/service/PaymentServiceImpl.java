@@ -1,12 +1,12 @@
 package com.storres.box_school.service;
 
 import java.time.LocalDate;
-import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.storres.box_school.exception.PriceActiveNotFoundException;
@@ -26,6 +26,7 @@ import com.storres.box_school.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
+@Service
 public class PaymentServiceImpl implements PaymentService {
 
     private final StudentRepository studentRepository;
@@ -83,7 +84,7 @@ public class PaymentServiceImpl implements PaymentService {
     public List<PaymentResponse> studentPayments(Long studentId) {
         log.info("Obteniendo el listado de pagos para el estudiante con id: {}",studentId);
 
-        return paymentRepository.findByStudenId(studentId)
+        return paymentRepository.findByStudentId(studentId)
         .stream().map(paymentMapper::toDto)
         .collect(Collectors.toList());
     }

@@ -26,6 +26,8 @@ public class StudentController {
 
     private final StudentService studentService;
 
+    //TODO: realizar los ressponseStatus
+
     @PostMapping
     public StudentResponse create(@Valid @RequestBody StudentRequest studentRequest) {
         return studentService.create(studentRequest);
@@ -36,7 +38,7 @@ public class StudentController {
         return studentService.findAll();
     }
 
-    @GetMapping("/{id}")
+    @GetMapping("/{id}")                                   
     public StudentResponse getById(@PathVariable Long id) {
         return studentService.getById(id);
 
