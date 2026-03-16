@@ -56,8 +56,8 @@ Acceso permitido segun roles
 
 Roles disponibles:
 
-ROLE_ADMIN
-ROLE_USER
+1. ROLE_ADMIN
+2. ROLE_USER
 
 
 ## Base de datos
