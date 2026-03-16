@@ -1,10 +1,10 @@
 # Boxing School - Backend
 
 Backend de una aplicación web para la gestión administrativa de una escuela de boxeo.
-El sistema permite manejar estudiantes, pagos, facturación y usuarios.
 
-Proyecto desarrollado con Java y Spring Boot, enfocado en buenas prácticas backend y
-estructura profesional.
+El sistema permite administrar estudiantes, pagos, facturación y usuarios mediante una API REST segura utilizando autenticación JWT.
+
+Este proyecto fue desarrollado como práctica profesional de backend utilizando Spring Boot y buenas prácticas de arquitectura.
 
 ## Tecnologías
 
@@ -21,17 +21,52 @@ estructura profesional.
 
 Arquitectura en capas:
 
-- controller
-- service
-- repository
-- model (entity, dto, shared)
 - config
+- controller
+- exception
+- mapper
+- model (entity, dto, shared)
+- repository
+- security
+- service
+- util
+
+## Separacion de responsabilidades
+
+- Controller: endpoints REST
+- Service: lógica de negocio
+- Repository: acceso a datos
+- DTO: transferencia de datos
+- Entity: modelos de base de datos
+
+## Seguridad
+
+El sistema implementa autenticacion basada en JWT
+Flujo de autenticacion:
+
+Login
+  |
+Generacion de JWT
+  |
+Cliente envia token en Authorization Header
+  |
+JwtAuthenticationFilter valida el token
+  |
+Acceso permitido segun roles
+
+Roles disponibles:
+
+ROLE_ADMIN
+ROLE_USER
+
 
 ## Base de datos
 
 - PostgreSQL
 - Las tablas se generan automáticamente mediante JPA
+- ddl-auto=update
 - La base de datos debe crearse previamente
+- boxing_school
 
 ## Configuración
 
@@ -42,6 +77,7 @@ Variables requeridas:
 - DB_URL
 - DB_USERNAME
 - DB_PASSWORD
+- JWT_SECRET
 
 ## Ejecución
 
@@ -49,5 +85,20 @@ Variables requeridas:
 2. Configurar variables de entorno
 3. Ejecutar:
 
-```bash
 mvn spring-boot:run
+
+## Autor
+
+Desarrollado por Santiago Torres
+Proyecto de practica profesional backend.
+
+## Mejoras futuras
+
+- Refresh Token
+- Documentacion con Swagger
+- Test unitarios
+- Docker
+- Deploy en la nube
+
+
+

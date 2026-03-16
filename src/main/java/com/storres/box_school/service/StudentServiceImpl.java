@@ -58,7 +58,7 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     public void delete(Long id) {
-        log.warn("Eliminando estudiante por ID");
+        log.warn("Eliminando estudiante con id{}", id);
         validateId(id);
         log.info("validando que el id sea valido");
         studentRepository.deleteById(id);
