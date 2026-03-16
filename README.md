@@ -1,4 +1,4 @@
-# Box School - Backend
+# Boxing School - Backend
 
 Backend de una aplicación web para la gestión administrativa de una escuela de boxeo.
 El sistema permite manejar estudiantes, pagos, facturación y usuarios.
