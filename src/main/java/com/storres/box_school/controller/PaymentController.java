@@ -3,6 +3,7 @@ package com.storres.box_school.controller;
 import java.util.List;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -25,7 +26,8 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
-    //ADMIN  ESTO ES PARA SPRING SECURITY
+    
+    @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.OK)
     @GetMapping
     public List<PaymentResponse> studentPaymentsAll() {
@@ -38,7 +40,7 @@ public class PaymentController {
         return paymentService.studentPayments(studentId);
 
     }
-    //ADMIN
+    @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/{studentId}")
     public PaymentResponse createNewPayment(@Valid @RequestBody PaymentRequest request, @PathVariable Long studentId) {

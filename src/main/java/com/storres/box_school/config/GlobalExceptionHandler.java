@@ -15,6 +15,7 @@ import com.storres.box_school.exception.EmailAlreadyExistsException;
 import com.storres.box_school.exception.PriceActiveNotFoundException;
 import com.storres.box_school.exception.StudentNotActiveException;
 import com.storres.box_school.exception.StudentNotFoundExcepcion;
+import com.storres.box_school.exception.UsernameAlreadyExistsException;
 import com.storres.box_school.model.dto.ApiErrorResponse;
 
 @ControllerAdvice
@@ -35,6 +36,32 @@ public class GlobalExceptionHandler {
                         .getFieldErrors()
                         .stream()
                         .collect(Collectors.toMap(er -> er.getField(), er -> er.getDefaultMessage())));
+        return ResponseEntity.badRequest().body(response);
+    }
+
+    @ExceptionHandler(org.springframework.security.authentication.BadCredentialsException.class)
+    public ResponseEntity<ApiErrorResponse> handleBadCredentialsException(Exception ex) {
+
+        var response = new ApiErrorResponse();
+        response.setTimestamp(LocalDateTime.now());
+        response.setCode(HttpStatus.UNAUTHORIZED.value());
+        response.setMessage("Credenciales incorrectas");
+        response.setErrors(null);
+
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(response);
+    }
+
+    @ExceptionHandler(UsernameAlreadyExistsException.class)
+    public ResponseEntity<ApiErrorResponse> handleUsernameAlreadyExistsException(UsernameAlreadyExistsException ex) {
+
+        log.warn("Intento de username duplicado: {}", ex.getMessage());
+
+        var response = new ApiErrorResponse();
+        response.setTimestamp(LocalDateTime.now());
+        response.setCode(HttpStatus.BAD_REQUEST.value());
+        response.setMessage(ex.getMessage());
+        response.setErrors(null);
+
         return ResponseEntity.badRequest().body(response);
     }
 
@@ -90,7 +117,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiErrorResponse> handleGenericException(Exception ex) {
-        log.warn("Error inesperado en la aplicacion", ex.getMessage());
+        log.warn("Error inesperado en la aplicacion", ex);
         var response = new ApiErrorResponse();
         response.setTimestamp(LocalDateTime.now());
         response.setCode(HttpStatus.INTERNAL_SERVER_ERROR.value());

@@ -1,7 +1,6 @@
 package com.storres.box_school.model.dto;
 
 import java.math.BigDecimal;
-import java.time.LocalDate;
 
 import com.storres.box_school.model.shared.PaymentType;
 
