@@ -70,7 +70,7 @@ ROLE_USER
 
 ## Configuración
 
-La aplicación utiliza variables de entorno para la conexión a la base de datos.
+La aplicación utiliza variables de entorno para la conexión a la base de datos y para el Token.
 
 Variables requeridas:
 
@@ -89,8 +89,8 @@ mvn spring-boot:run
 
 ## Autor
 
-Desarrollado por Santiago Torres
-Proyecto de practica profesional backend.
+### Desarrollado por Santiago Torres
+### Proyecto de practica profesional backend.
 
 ## Mejoras futuras
 
