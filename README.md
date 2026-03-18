@@ -89,8 +89,8 @@ mvn spring-boot:run
 
 ## Autor
 
-### Desarrollado por Santiago Torres
-### Proyecto de practica profesional backend.
+- Desarrollado por Santiago Torres
+- Proyecto de practica profesional backend.
 
 ## Mejoras futuras
 
