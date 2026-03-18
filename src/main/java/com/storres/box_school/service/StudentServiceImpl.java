@@ -6,6 +6,8 @@ import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 
 import com.storres.box_school.exception.EmailAlreadyExistsException;
@@ -49,11 +51,11 @@ public class StudentServiceImpl implements StudentService {
     }
 
     @Override
-    public List<StudentResponse> findAll() {
+    public Page<StudentResponse> findAll(Pageable pageable) {
         log.info("Consultado todos los estudiantes registrados");
-        return studentRepository.findAll().stream()
-                .map(studentMapper::toDto)
-                .collect(Collectors.toList());
+        return studentRepository.findAll(pageable)
+                .map(studentMapper::toDto);
+
     }
 
     @Override
@@ -111,11 +113,10 @@ public class StudentServiceImpl implements StudentService {
     }
 
     @Override
-    public List<StudentResponse> findStudentsWithExpireMembership() {
+    public Page<StudentResponse> findStudentsWithExpireMembership(Pageable pageable) {
         log.info("Consultando estudiantes con membresia por expirar");
-        return studentRepository.findByExpirationDateBefore(LocalDate.now()).stream()
-                .map(studentMapper::toDto)
-                .collect(Collectors.toList());
+        return studentRepository.findByExpirationDateBefore(LocalDate.now(), pageable)
+                .map(studentMapper::toDto);
     }
 
     @Override

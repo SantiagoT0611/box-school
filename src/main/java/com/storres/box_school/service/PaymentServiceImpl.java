@@ -2,10 +2,11 @@ package com.storres.box_school.service;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -81,21 +82,18 @@ public class PaymentServiceImpl implements PaymentService {
     }
 
     @Override
-    public List<PaymentResponse> studentPayments(Long studentId) {
-        log.info("Obteniendo el listado de pagos para el estudiante con id: {}",studentId);
-
-        return paymentRepository.findByStudentId(studentId)
-        .stream().map(paymentMapper::toDto)
-        .collect(Collectors.toList());
+    public Page<PaymentResponse> studentPayments(Long studentId, Pageable pageable) {
+        log.info("Obteniendo el listado de pagos para el estudiante con id: {}", studentId);
+        return paymentRepository.findByStudentId(studentId, pageable)
+                .map(paymentMapper::toDto);
     }
 
     @Override
-    public List<PaymentResponse> findAll() {
+    public Page<PaymentResponse> findAll(Pageable pageable) {
         log.info("Obteniendo el listado de pagos");
 
-        return paymentRepository.findAll().stream()
-        .map(paymentMapper::toDto)
-        .collect(Collectors.toList());
+        return paymentRepository.findAll(pageable)
+                .map(paymentMapper::toDto);
     }
 
 }

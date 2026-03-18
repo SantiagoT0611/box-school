@@ -1,8 +1,9 @@
 package com.storres.box_school.controller;
 
-import java.util.List;
-
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -26,25 +27,29 @@ public class PaymentController {
 
     private final PaymentService paymentService;
 
-    
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.OK)
     @GetMapping
-    public List<PaymentResponse> studentPaymentsAll() {
-        return paymentService.findAll();
+    public ResponseEntity<Page<PaymentResponse>> studentPaymentsAll(Pageable pageable) {
+        return ResponseEntity.ok(paymentService.findAll(pageable));
     }
-    //ADMIN AND STUDENT
+
+    // ADMIN AND STUDENT
     @ResponseStatus(HttpStatus.OK)
     @GetMapping("/{studentId}")
-    public List<PaymentResponse> studentPaymentsById(@PathVariable Long studentId) {
-        return paymentService.studentPayments(studentId);
+    public ResponseEntity<Page<PaymentResponse>> studentPaymentsById(@PathVariable Long studentId, Pageable pageable) {
+        return ResponseEntity.ok(paymentService.studentPayments(studentId, pageable));
 
     }
+
     @PreAuthorize("hasRole('ADMIN')")
     @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/{studentId}")
-    public PaymentResponse createNewPayment(@Valid @RequestBody PaymentRequest request, @PathVariable Long studentId) {
-        return paymentService.payMembership(request, studentId);
+    public ResponseEntity<PaymentResponse> createNewPayment(@Valid @RequestBody PaymentRequest request,
+            @PathVariable Long studentId) {
+        PaymentResponse info = paymentService.payMembership(request, studentId);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(info);
     }
 
 }

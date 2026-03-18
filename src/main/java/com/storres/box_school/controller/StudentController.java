@@ -2,6 +2,9 @@ package com.storres.box_school.controller;
 
 import java.util.List;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -30,29 +33,33 @@ public class StudentController {
 
     private final StudentService studentService;
 
-    // TODO: realizar los ressponseStatus
-
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
-    public StudentResponse create(@Valid @RequestBody StudentRequest studentRequest) {
-        return studentService.create(studentRequest);
+    public ResponseEntity<StudentResponse> create(@Valid @RequestBody StudentRequest studentRequest) {
+        StudentResponse student = studentService.create(studentRequest);
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(student);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping
-    public List<StudentResponse> getAllStudents() {
-        return studentService.findAll();
+    public ResponseEntity<Page<StudentResponse>> getAllStudents(Pageable pageable) {
+        Page<StudentResponse> students = studentService.findAll(pageable);
+
+        return ResponseEntity.status(HttpStatus.OK).body(students);
     }
 
     @GetMapping("/{id}")
-    public StudentResponse getById(@PathVariable Long id) {
-        return studentService.getById(id);
+    public ResponseEntity<StudentResponse> getById(@PathVariable Long id) {
+        return ResponseEntity.ok(studentService.getById(id));
 
     }
 
     @PutMapping("/{id}")
-    public StudentResponse updateStudents(@PathVariable Long id, @Valid @RequestBody StudentRequest info) {
-        return studentService.updateStudent(id, info);
+    public ResponseEntity<StudentResponse> updateStudents(@PathVariable Long id,
+            @Valid @RequestBody StudentRequest info) {
+        StudentResponse updateInfo = studentService.updateStudent(id, info);
+        return ResponseEntity.ok(updateInfo);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
@@ -64,19 +71,22 @@ public class StudentController {
 
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/expired")
-    public List<StudentResponse> findStudentsWithExpireMembership() {
-        return studentService.findStudentsWithExpireMembership();
+    public ResponseEntity<Page<StudentResponse>> findStudentsWithExpireMembership(Pageable pageable) {
+        return ResponseEntity.ok(studentService.findStudentsWithExpireMembership(pageable)) ;
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/{id}/desactive")
-    public StudentResponse desativeStudents(@PathVariable Long id) {
-        return studentService.desactiveStudent(id);
+    public ResponseEntity<StudentResponse> desactiveStudents(@PathVariable Long id) {
+        StudentResponse info = studentService.desactiveStudent(id);
+        return ResponseEntity.ok(info);
     }
 
     @PreAuthorize("hasRole('ADMIN')")
     @PatchMapping("/{id}/active")
-    public StudentResponse activeStudents(@PathVariable Long id) {
-        return studentService.activeStudent(id);
+    public ResponseEntity<StudentResponse> activeStudents(@PathVariable Long id) {
+        StudentResponse info = studentService.activeStudent(id);
+
+        return ResponseEntity.ok(info);
     }
 }

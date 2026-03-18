@@ -40,6 +40,7 @@ public class User {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private Roles role;
+    @Builder.Default
     @Column(nullable = false)
     private Boolean enabled = true;
 
