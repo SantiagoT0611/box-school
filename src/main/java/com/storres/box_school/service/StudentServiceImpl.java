@@ -1,8 +1,6 @@
 package com.storres.box_school.service;
 
 import java.time.LocalDate;
-import java.util.List;
-import java.util.stream.Collectors;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +39,7 @@ public class StudentServiceImpl implements StudentService {
         // campos que decide el sistema
         entity.setRegistrationDate(LocalDate.now());
         entity.setStatus(Status.ACTIVE);
+        entity.setExpirationDate(LocalDate.now().plusMonths(1));
 
         // guardo en la db
         Student saved = studentRepository.save(entity);
@@ -60,10 +59,12 @@ public class StudentServiceImpl implements StudentService {
 
     @Override
     public void delete(Long id) {
-        log.warn("Eliminando estudiante con id{}", id);
-        validateId(id);
+        log.warn("Eliminando estudiante con id {}", id);
+        Student student = studentRepository.findById(id)
+                .orElseThrow(() -> new StudentNotFoundExcepcion());
+
         log.info("validando que el id sea valido");
-        studentRepository.deleteById(id);
+        studentRepository.delete(student);
         log.info("Estudiante eliminado");
     }
 
@@ -102,9 +103,16 @@ public class StudentServiceImpl implements StudentService {
             }
         }
 
-        student.setFirstName(info.getFirstName());
-        student.setLastName(info.getLastName());
-        student.setPhone(info.getPhone());
+        if (info.getFirstName() != null) {
+            student.setFirstName(info.getFirstName());
+        }
+        if (info.getLastName() != null) {
+            student.setLastName(info.getLastName());
+        }
+        if (info.getPhone() != null) {
+            student.setPhone(info.getPhone());
+        }
+
         log.info("Estudiante con el id {} ha sido actualizado correctamente...", id);
         Student update = studentRepository.save(student);
 
@@ -115,7 +123,7 @@ public class StudentServiceImpl implements StudentService {
     @Override
     public Page<StudentResponse> findStudentsWithExpireMembership(Pageable pageable) {
         log.info("Consultando estudiantes con membresia por expirar");
-        return studentRepository.findByExpirationDateBefore(LocalDate.now(), pageable)
+        return studentRepository.findByExpirationDateBefore(LocalDate.now().plusDays(3), pageable)
                 .map(studentMapper::toDto);
     }
 
@@ -158,6 +166,14 @@ public class StudentServiceImpl implements StudentService {
 
         return studentMapper.toDto(update);
     }
+
+    public Page<StudentResponse> findActiveStudents(Pageable pageable){
+        log.info("Consultando estudiantes activos");
+
+        return studentRepository.findByStatus(Status.ACTIVE, pageable)
+            .map(studentMapper::toDto);
+
+    };
 
     private void validateId(Long id) {
 

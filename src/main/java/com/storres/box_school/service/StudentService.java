@@ -24,6 +24,7 @@ public interface StudentService {
 
      StudentResponse activeStudent(Long id);
      
+     Page<StudentResponse> findActiveStudents(Pageable pageable);
 
 
 }

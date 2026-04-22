@@ -28,22 +28,19 @@ public class PaymentController {
     private final PaymentService paymentService;
 
     @PreAuthorize("hasRole('ADMIN')")
-    @ResponseStatus(HttpStatus.OK)
     @GetMapping
-    public ResponseEntity<Page<PaymentResponse>> studentPaymentsAll(Pageable pageable) {
+    public ResponseEntity<Page<PaymentResponse>> getAllPayments (Pageable pageable) {
         return ResponseEntity.ok(paymentService.findAll(pageable));
     }
 
-    // ADMIN AND STUDENT
-    @ResponseStatus(HttpStatus.OK)
+    @PreAuthorize("hasRole('ADMIN') or #studentId == authentication.principal.student.id")
     @GetMapping("/{studentId}")
-    public ResponseEntity<Page<PaymentResponse>> studentPaymentsById(@PathVariable Long studentId, Pageable pageable) {
+    public ResponseEntity<Page<PaymentResponse>> getPaymentsByStudentId(@PathVariable Long studentId, Pageable pageable) {
         return ResponseEntity.ok(paymentService.studentPayments(studentId, pageable));
 
     }
 
     @PreAuthorize("hasRole('ADMIN')")
-    @ResponseStatus(HttpStatus.CREATED)
     @PostMapping("/{studentId}")
     public ResponseEntity<PaymentResponse> createNewPayment(@Valid @RequestBody PaymentRequest request,
             @PathVariable Long studentId) {

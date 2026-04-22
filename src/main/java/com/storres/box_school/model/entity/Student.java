@@ -38,6 +38,7 @@ public class Student {
     @Column(name = "last_name")
     private String lastName;
     @NotNull
+    @Column(unique = true)
     private String email;
     @NotNull
     private String phone;
