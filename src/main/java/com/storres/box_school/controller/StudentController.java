@@ -29,7 +29,7 @@ public class StudentController {
 
     private final StudentService studentService;
 
-    @PreAuthorize("hasRole('ADMIN')")
+    // @PreAuthorize("hasRole('ADMIN')")
     @PostMapping
     public ResponseEntity<StudentResponse> create(@Valid @RequestBody StudentRequest studentRequest) {
         StudentResponse student = studentService.create(studentRequest);
@@ -51,6 +51,7 @@ public class StudentController {
 
     }
 
+    @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/{id}")
     public ResponseEntity<StudentResponse> updateStudents(@PathVariable Long id,
             @Valid @RequestBody StudentRequest info) {
@@ -68,7 +69,7 @@ public class StudentController {
     @PreAuthorize("hasRole('ADMIN')")
     @GetMapping("/expired")
     public ResponseEntity<Page<StudentResponse>> findStudentsWithExpireMembership(Pageable pageable) {
-        return ResponseEntity.ok(studentService.findStudentsWithExpireMembership(pageable)) ;
+        return ResponseEntity.ok(studentService.findStudentsWithExpireMembership(pageable));
     }
 
     @PreAuthorize("hasRole('ADMIN')")
