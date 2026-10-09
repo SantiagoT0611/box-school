@@ -1,7 +1,7 @@
 # Box School — Decisiones y memoria del proyecto
 
 > **Para quien retome este proyecto (persona o IA): lee este archivo primero y actualízalo al final de cada cambio relevante.**
-> Aquí está el *por qué* de las decisiones. El *qué* está en el código; el hallazgo-por-hallazgo de la auditoría inicial está en [AUDIT_REPORT.md](AUDIT_REPORT.md).
+> Aquí está el *por qué* de las decisiones. El *qué* está en el código; el hallazgo-por-hallazgo de la auditoría inicial está en [AUDIT_REPORT.md](AUDIT_REPORT.md). **Qué sigue y en qué orden: [ROADMAP.md](ROADMAP.md).** Informes de auditoría por fase: [audits/](audits/).
 >
 > Reglas de mantenimiento:
 > 1. Una decisión nueva = una entrada `D-0xx` (contexto → decisión → consecuencias). No se borran; si cambian, se marca `Reemplaza a D-0xx` y se actualiza el estado de la vieja.
@@ -108,15 +108,27 @@ H2 modo PostgreSQL + Flyway real + `ddl-auto=validate`. `ApiFlowIntegrationTest`
 ### D-016 · Convenciones — *Vigente*
 Código en inglés, mensajes al usuario en español. Se corrigió `StudentNotFoundExcepcion` → `StudentNotFoundException` y `desactive` → `deactivate`. Emails y usernames se normalizan a minúsculas. Sin código comentado ni muerto. Cambios de contrato de API deben anotarse en la sección 2 de este archivo.
 
+### D-017 · Pagos con dos modalidades: zona manual (QR + cuenta) y pasarela opcional — *Decidida; implementación en ROADMAP Fase 2*
+**Contexto:** la escuela opera en **Colombia** (COP). Las pasarelas candidatas (**Wompi** o **PayU**) cobran comisión y el cliente puede no querer pagarla. **Decisión:** el sistema debe funcionar completo sin pasarela. Modalidades: (1) **efectivo** registrado por el admin; (2) **transferencia manual**: una "zona de pago" muestra el **QR del banco, número de cuenta y datos de transferencia** (configurables por el admin en `payment_settings`), el estudiante reporta su pago (referencia + comprobante opcional) y el admin lo aprueba o rechaza; (3) **pasarela** (Wompi primero, PayU por la misma interfaz `PaymentGateway`), activable con un flag. Las modalidades 2 y 3 se encienden/apagan por separado. Se construye primero la 2 porque no depende de terceros.
+
+### D-018 · Un pago solo extiende la membresía cuando queda `APPROVED` — *Decidida*
+`Payment` tendrá `status` (`PENDING|APPROVED|REJECTED`) y `method` (`CASH|BANK_TRANSFER|GATEWAY`). La extensión del vencimiento (cálculo de periodo + bloqueo `findByIdForUpdate`, hoy en `PaymentServiceImpl.payMembership`) se mueve a un único `approve(payment)` usado por las tres modalidades. **Nunca** se aprueba por el redirect del navegador ni por datos del cliente; el webhook de la pasarela exige firma válida **y** consulta de la transacción a la API de la pasarela, e idempotencia por `reference`. El monto siempre sale del precio vigente.
+
+### D-019 · Puerta de calidad obligatoria al cerrar cada fase — *Decidida (regla permanente)*
+Ninguna fase del ROADMAP se da por cerrada sin una **auditoría independiente y escéptica** del código nuevo (subagente separado, sin el historial de cómo se escribió) aplicando `code-audit`, `backend-security`, `backend-scalability` y `backend-best-practices`, más "intentos de romperlo" por escrito, con un **informe detallado** en `docs/audits/FASE-N-*.md` ([plantilla](audits/TEMPLATE.md)). Cierre = 0 hallazgos críticos/altos abiertos, medios corregidos o con excepción registrada, tests en verde. **Motivo:** la auditoría base la hizo la misma sesión que implementó las correcciones (sesgo de confirmación); el dueño pidió rigor y escepticismo explícitos en seguridad y buenas prácticas. Detalle del procedimiento: [ROADMAP.md §2](ROADMAP.md).
+
+### D-020 · El frontend no se inicia hasta recibir los mockups del dueño — *Decidida (bloqueo)*
+El dueño enviará **mockups** y de ahí saldrán las decisiones de tipografía, diseño y UI/UX. Hasta entonces no se crea el proyecto Angular ni se eligen paleta, fuentes o componentes. Al recibirlos: skill `ui-ux-engineer` → `docs/DESIGN.md` → registrar aquí → recién crear el frontend (consume el contrato de la sección 2). El backend se mantiene listo (contrato estable, CORS configurable, errores uniformes). Cada módulo del frontend también pasa por la puerta de calidad (D-019) adaptada.
+
 ## 4. Decisiones abiertas (necesitan al dueño)
 
 | ID | Tema | Estado / propuesta |
 |---|---|---|
-| **O-1** | **Pago en línea por el estudiante.** Hoy solo el admin registra pagos (efectivo/transferencia). El objetivo del negocio incluye que el estudiante pague solo. Falta elegir **pasarela** (depende del país: Wompi/PayU/MercadoPago/Stripe…). | Propuesta: interfaz `PaymentGateway`; `Payment` gana `status` (PENDING/PAID/FAILED), `method`, `provider_reference` única; `POST /api/payments/me/checkout` crea el cobro; webhook firmado (verificar firma, idempotente por referencia) confirma y recién entonces extiende la membresía. **Nunca** confiar en el redirect del navegador. |
-| O-2 | Refresh token / duración de sesión | Hoy 120 min sin refresh. Propuesta: refresh opaco rotativo en BD cuando el frontend lo pida. |
-| O-3 | Facturación | La entidad `Invoice` y su tabla existen pero no se usan. Definir si hay factura por pago (¿legal/electrónica según el país?) o se elimina. |
-| O-4 | Zona horaria del negocio | Definir `APP_TIMEZONE` (afecta cuándo "vence hoy"). |
-| O-5 | Recuperar contraseña | **No existe.** Propuesta: `POST /api/auth/forgot-password` (token de un solo uso por correo, hash en BD, expira 30 min) + `reset-password`. Prioridad alta antes de salir a producción. |
+| **O-1** | **Pago en línea por el estudiante.** Hoy solo el admin registra pagos. | **Decidida en parte** → D-017/D-018 (Colombia; zona manual QR+cuenta con aprobación del admin + pasarela Wompi/PayU opcional). **Pendiente del dueño:** cuenta sandbox y decisión sobre la comisión (solo para la pasarela); datos bancarios y QR reales (para la zona manual). Plan en ROADMAP Fase 2. |
+| O-2 | Refresh token / duración de sesión | Hoy 120 min sin refresh. Propuesta: refresh opaco rotativo en BD cuando el frontend lo pida (ROADMAP Fase 3). |
+| O-3 | Facturación | La entidad `Invoice` y su tabla existen pero no se usan. Definir si hay factura por pago (¿electrónica DIAN?) o se elimina (ROADMAP Fase 3). |
+| O-4 | Zona horaria del negocio | **Probable `America/Bogota`** (Colombia); confirmar y fijar `APP_TIMEZONE` (ROADMAP Fase 0). |
+| O-5 | Recuperar contraseña | **No existe.** Es la **siguiente tarea** tras verificar en PostgreSQL (ROADMAP Fase 1): `forgot-password` (token de un solo uso por correo, hash en BD, expira 30 min) + `reset-password` + `change-password`, invalidando JWT anteriores. |
 | O-6 | Varias instancias | Rate limit a Redis (D-011); opcional ShedLock para el scheduler (D-008). |
 | O-7 | Tests contra PostgreSQL real | Agregar Testcontainers (requiere Docker) para verificar locks y baseline. |
 | O-8 | CI/CD y despliegue | GitHub Actions con `./mvnw verify`; Dockerfile + compose (README lo lista como futuro). |
@@ -136,4 +148,5 @@ Código en inglés, mensajes al usuario en español. Se corrigió `StudentNotFou
 
 | Fecha | Cambio |
 |---|---|
+| 2026-10-08 | Se crea [ROADMAP.md](ROADMAP.md) (fases 0–5) y [audits/](audits/) con plantilla de informe. Decisiones del dueño: Colombia, pagos en dos modalidades (zona manual QR+cuenta y pasarela Wompi/PayU opcional) → D-017/D-018; puerta de calidad obligatoria por fase con auditor independiente → D-019; frontend bloqueado hasta recibir mockups → D-020. Orden elegido: verificar en PostgreSQL → recuperar contraseña → pagos. |
 | 2026-10-08 | Auditoría completa (seguridad, buenas prácticas, escalabilidad) → [AUDIT_REPORT.md](AUDIT_REPORT.md). Se corrigieron todos los hallazgos críticos/altos/medios, se implementaron recordatorios de vencimiento, precios, endpoints `me`, búsqueda, Flyway, rate limit, configuración por entorno y 26 tests. Se crea este archivo y `CLAUDE.md`. Se eliminaron `DataSeeder` (admin/admin123 fijo) y su test, sustituidos por `AdminBootstrap`. |
