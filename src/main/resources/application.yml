@@ -78,6 +78,7 @@ app:
     enabled: ${REMINDER_ENABLED:true}
     days-before-expiry: ${REMINDER_DAYS_BEFORE:2}
     cron: ${REMINDER_CRON:0 0 8 * * *}           # segundos min hora dia mes dia-semana
+    delay-between-emails-ms: ${REMINDER_DELAY_MS:1000}   # pausa entre correos (limite de envios/segundo del proveedor)
   registration:
     code-validity-hours: ${REGISTRATION_CODE_HOURS:72}
   rate-limit:

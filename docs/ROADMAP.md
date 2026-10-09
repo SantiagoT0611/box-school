@@ -53,7 +53,9 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 - [x] Arranque con la BD **existente**: Flyway toma V1 como baseline y aplica V2–V5; Hibernate `validate` pasa en PostgreSQL 18. Aplicado también a la base real (`box-school`): 4 estudiantes intactos, historial de Flyway V1–V5 sin errores.
 - [x] Recorrido completo por HTTP con [`scripts/smoke_test.py`](../scripts/smoke_test.py) (36 chequeos): precio → estudiante → registro con código → permisos 401/403 → pagos → deshabilitar. **36/36.**
 - [x] **Seis pagos simultáneos** al mismo estudiante: los 6 dan 201 y el vencimiento suma exactamente +180 días, periodos contiguos (valida `PESSIMISTIC_WRITE` en PostgreSQL real).
-- [x] Reproducción en test (`LegacySchemaRepairTest`) del esquema heredado de la base real.
+- [x] Reproducción en test del esquema heredado: `LegacySchemaRepairTest` (H2) y **`PostgresLegacyUpgradeTest` (PostgreSQL 16 real en Docker/Testcontainers)**: esquema creado "a la Hibernate" → Flyway baseline → V2–V5 → `validate`, login de usuarios heredados y 8 pagos simultáneos. Comprobado por mutación: con V5 desactivada esos tests fallan con el mismo error que tuvo la base real.
+- [x] Eliminado el usuario `admin` (admin123) de la base real (solo la cuenta; el estudiante vinculado quedó intacto). `salito` es el único administrador.
+- [x] `APP_TIMEZONE=America/Bogota` fijada como variable de usuario.
 
 **Hallazgos de esta verificación** (H2 no podía mostrarlos; todos corregidos):
 1. 🔴 **Login roto para usuarios existentes:** `Salito` y `Sofi` tenían mayúsculas y el login normaliza a minúsculas → no habrían podido entrar. → `V3` normaliza usernames y emails (falla si hay colisiones, no pisa datos).
@@ -64,11 +66,9 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 - La tabla huérfana `price` (vacía) queda en la base; se puede borrar a mano cuando quieras (`drop table price;`), no estorba.
 
 **Pendiente de la Fase 0**
-- [ ] Eliminar el usuario `admin` (clave `admin123`, del seeder viejo) de la base real y dejar a `salito` como administrador (o crear otro con `BOOTSTRAP_ADMIN_*`). *Requiere confirmación del dueño.*
-- [ ] Correo real (Mailtrap o Gmail con contraseña de aplicación): código de registro y `POST /api/notifications/membership-reminders/run`. Las variables de correo (`SPRING_MAIL_*`) **no están definidas** aún.
-- [ ] Definir `APP_TIMEZONE=America/Bogota` (confirmar con el dueño).
+- [x] Correo con **Mailtrap** (SMTP real; bandeja de pruebas): el servidor envía el código de registro y los recordatorios; con la pausa de 11 s entre correos, 2 de 2 enviados en una corrida y 0 en la segunda (idempotente). **Hallazgo:** el plan gratis de Mailtrap rechaza ráfagas (`550 Too many emails per second`, incluso a 1 envío/s); el servicio liberó el registro y lo reenvió en el ciclo siguiente, como se diseñó → se añadió `app.membership-reminder.delay-between-emails-ms` (por defecto 1000 ms, `REMINDER_DELAY_MS`). Para probar en la sandbox gratuita usar `REMINDER_DELAY_MS=11000`.
+- [x] El dueño confirmó en su bandeja de Mailtrap la llegada de los correos (código de registro y avisos). Se corrigieron tildes y formato de fecha; `MailServiceTest` cubre remitente y UTF-8. **Antes de producción definir `MAIL_FROM`.**
 - [ ] Puerto: Docker Desktop ocupa el **8080** en esta máquina; arrancar la app con `SERVER_PORT=8082` (o liberar el puerto).
-- [ ] *(Docker está instalado)* Testcontainers con PostgreSQL en los tests (O-7): evita depender de H2 para locks y esquemas heredados.
 - [ ] **Puerta de calidad** de la fase con auditor independiente (foco: migraciones, configuración, despliegue, secretos) → `docs/audits/FASE-0-verificacion-postgres.md`.
 
 ### ⬜ Fase 1 — Recuperar y cambiar contraseña (O-5)

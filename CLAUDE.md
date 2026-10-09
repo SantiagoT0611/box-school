@@ -16,13 +16,13 @@ Sistema de gestión administrativa para una escuela de boxeo: estudiantes con me
 ## Comandos
 
 ```bash
-./mvnw test                      # 26 tests; H2 en modo PostgreSQL + migraciones reales (no necesita BD ni Docker)
+./mvnw test                      # 34 tests; H2 + migraciones reales; PostgresLegacyUpgradeTest usa PostgreSQL en Docker (Testcontainers, se omite sin Docker)
 ./mvnw spring-boot:run           # requiere variables de entorno: ver .env.example
 ```
 
 ## Reglas del proyecto
 
-- Esquema solo por Flyway (`src/main/resources/db/migration`); **nunca editar una migración aplicada**, crear `V3__…`. `ddl-auto=validate`.
+- Esquema solo por Flyway (`src/main/resources/db/migration`); **nunca editar una migración aplicada**; la siguiente es `V6__…`. `ddl-auto=validate`.
 - Nada de secretos ni credenciales por defecto en el código o en `application.yml`; todo por variables de entorno.
 - "Hoy" siempre desde el bean `Clock`, nunca `LocalDate.now()` suelto.
 - Cada endpoint nuevo: `@PreAuthorize` + matcher en `SecurityConfig`; el estudiante accede a lo suyo por rutas `/me`, nunca por un id que él envíe.

@@ -2,6 +2,7 @@ package com.storres.box_school.service;
 
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -163,8 +164,9 @@ public class StudentServiceImpl implements StudentService {
     private void sendRegistrationCode(Student student, RegistrationCodeResponse code) {
         mailService.sendQuietly(student.getEmail(), "Activa tu cuenta en la escuela de boxeo",
                 "Hola " + student.getFirstName() + ",\n\n"
-                        + "Ya estas inscrito en la escuela de boxeo. Para crear tu usuario usa este codigo "
+                        + "Ya estás inscrito en la escuela de boxeo. Para crear tu usuario usa este código "
                         + "junto con tu email: " + code.registrationCode() + "\n"
-                        + "El codigo es de un solo uso y vence el " + code.expiresAt().toLocalDate() + ".");
+                        + "El código es de un solo uso y vence el "
+                        + code.expiresAt().toLocalDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) + ".");
     }
 }

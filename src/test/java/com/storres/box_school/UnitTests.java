@@ -33,7 +33,7 @@ class UnitTests {
 
     private static AppProperties props(String adminUser, String adminPass) {
         return new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(""),
-                new AppProperties.MembershipReminder(false, 2, "0 0 8 * * *"),
+                new AppProperties.MembershipReminder(false, 2, "0 0 8 * * *", 0),
                 new AppProperties.Registration(72), new AppProperties.RateLimit(10),
                 new AppProperties.BootstrapAdmin(adminUser, adminPass));
     }

@@ -99,7 +99,8 @@ public class MembershipReminderService {
 
         try {
             long days = ChronoUnit.DAYS.between(today, student.getExpirationDate());
-            mailService.send(student.getEmail(), "Tu mensualidad esta por vencer", buildBody(student, days));
+            mailService.send(student.getEmail(), "Tu mensualidad está por vencer", buildBody(student, days));
+            pauseBetweenEmails();
             return true;
         } catch (Exception e) {
             log.error("No se pudo enviar el recordatorio al estudiante id={}", student.getId(), e);
@@ -108,9 +109,22 @@ public class MembershipReminderService {
         }
     }
 
+    /** Evita superar el limite de envios por segundo del proveedor SMTP (el job corre en segundo plano). */
+    private void pauseBetweenEmails() {
+        long delay = props.membershipReminder().delayBetweenEmailsMs();
+        if (delay <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(delay);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private String buildBody(Student student, long daysLeft) {
         String when = daysLeft <= 0 ? "vence hoy"
-                : daysLeft == 1 ? "vence manana" : "vence en " + daysLeft + " dias";
+                : daysLeft == 1 ? "vence mañana" : "vence en " + daysLeft + " días";
         return "Hola " + student.getFirstName() + ",\n\n"
                 + "Tu mensualidad en la escuela de boxeo " + when
                 + " (" + student.getExpirationDate().format(DATE_FORMAT) + ").\n"

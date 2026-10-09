@@ -30,7 +30,9 @@ public record AppProperties(
     public record MembershipReminder(
             @DefaultValue("true") boolean enabled,
             @DefaultValue("2") int daysBeforeExpiry,
-            @DefaultValue("0 0 8 * * *") String cron) {
+            @DefaultValue("0 0 8 * * *") String cron,
+            /** Pausa entre correos de un mismo ciclo: los proveedores SMTP limitan los envios por segundo. */
+            @DefaultValue("1000") long delayBetweenEmailsMs) {
     }
 
     public record Registration(@DefaultValue("72") int codeValidityHours) {

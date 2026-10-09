@@ -31,7 +31,7 @@ Con el perfil `dev`, Swagger queda en `http://localhost:8080/swagger-ui.html`. S
 
 ### Si ya tenías una base creada con la versión anterior
 
-Flyway la adopta automáticamente (`baseline-version: 1`) y aplica la migración V2. **Elimina o cambia la clave del usuario `admin` / `admin123`** que creaba el antiguo seeder, y crea tu administrador con las variables `BOOTSTRAP_ADMIN_*`.
+Flyway la adopta automáticamente (`baseline-version: 1`), aplica las migraciones V2–V5 (que además reparan restos que dejaba `ddl-auto=update`) y la app valida el esquema al arrancar. **Haz un respaldo antes** (`pg_dump`). Si existe el usuario `admin` / `admin123` que creaba el antiguo seeder, elimínalo o cambia su clave; los administradores nuevos se crean con `BOOTSTRAP_ADMIN_*` (solo si no existe ya ninguno).
 Las variables de correo cambiaron de nombre (`MAIL_HOST` → `SPRING_MAIL_HOST`, etc.) y `LICENSE_REMINDER_CRON` → `REMINDER_CRON`.
 
 ## Tests
@@ -40,7 +40,11 @@ Las variables de correo cambiaron de nombre (`MAIL_HOST` → `SPRING_MAIL_HOST`,
 ./mvnw test
 ```
 
-Usan H2 en modo PostgreSQL con las mismas migraciones Flyway: no requieren base de datos ni Docker.
+La mayoría usa H2 en modo PostgreSQL con las mismas migraciones Flyway (no requieren base de datos). `PostgresLegacyUpgradeTest` usa un **PostgreSQL real en Docker** (Testcontainers) para reproducir la actualización de una base heredada y los pagos simultáneos; se omite solo si Docker no está disponible.
+
+Prueba de punta a punta contra una instancia en marcha (usar una copia de la base: escribe datos de prueba): `scripts/smoke_test.py`.
+
+> En Windows con Docker Desktop el puerto 8080 puede estar ocupado: arranca con `SERVER_PORT=8082`.
 
 ## Estructura
 
