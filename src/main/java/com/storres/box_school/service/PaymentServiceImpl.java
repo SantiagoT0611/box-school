@@ -1,7 +1,7 @@
 package com.storres.box_school.service;
 
+import java.time.Clock;
 import java.time.LocalDate;
-import java.util.List;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.storres.box_school.exception.PriceActiveNotFoundException;
 import com.storres.box_school.exception.StudentNotActiveException;
-import com.storres.box_school.exception.StudentNotFoundExcepcion;
+import com.storres.box_school.exception.StudentNotFoundException;
 import com.storres.box_school.mapper.PaymentMapper;
 import com.storres.box_school.model.dto.PaymentRequest;
 import com.storres.box_school.model.dto.PaymentResponse;
@@ -23,77 +23,82 @@ import com.storres.box_school.model.shared.Status;
 import com.storres.box_school.repository.PaymentRepository;
 import com.storres.box_school.repository.PriceRepository;
 import com.storres.box_school.repository.StudentRepository;
+import com.storres.box_school.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
 
 @RequiredArgsConstructor
 @Service
+@Transactional(readOnly = true)
 public class PaymentServiceImpl implements PaymentService {
-
-    private final StudentRepository studentRepository;
-    private final PaymentMapper paymentMapper;
-    private final PriceRepository priceRepository;
-    private final PaymentRepository paymentRepository;
 
     private static final Logger log = LoggerFactory.getLogger(PaymentServiceImpl.class);
 
+    private final StudentRepository studentRepository;
+    private final UserRepository userRepository;
+    private final PriceRepository priceRepository;
+    private final PaymentRepository paymentRepository;
+    private final PaymentMapper paymentMapper;
+    private final Clock clock;
+
+    /**
+     * Regla de negocio: si la membresia sigue vigente, el nuevo periodo empieza donde termina el actual
+     * (no se pierden dias pagados); si ya vencio, empieza hoy.
+     * El estudiante se lee con bloqueo de fila para que dos pagos simultaneos no se pisen el vencimiento.
+     */
     @Override
     @Transactional
-    public PaymentResponse payMembership(PaymentRequest request, Long id) {
-        log.info("Busqueda de estudiante existente por id {}", id);
-        Student existing = studentRepository.findById(id)
-                .orElseThrow(() -> new StudentNotFoundExcepcion());
-        log.warn("El estudiante buscando con el id {} no existe", id);
+    public PaymentResponse payMembership(PaymentRequest request, Long studentId) {
+        Student student = studentRepository.findByIdForUpdate(studentId)
+                .orElseThrow(StudentNotFoundException::new);
 
-        if (existing.getStatus() != Status.ACTIVE) {
+        if (student.getStatus() != Status.ACTIVE) {
             throw new StudentNotActiveException("El estudiante no se encuentra activo");
         }
-        Price activePrice = priceRepository.findByTypeAndActiveTrue(request.getType())
-                .orElseThrow(() -> new PriceActiveNotFoundException());
+        Price price = priceRepository.findByTypeAndActiveTrue(request.getType())
+                .orElseThrow(PriceActiveNotFoundException::new);
 
-        LocalDate periodStart;
-        log.info("verificacion tiempo de membresia activo o inactivo");
+        LocalDate today = LocalDate.now(clock);
+        LocalDate periodStart = student.getExpirationDate().isAfter(today) ? student.getExpirationDate() : today;
+        LocalDate periodEnd = periodStart.plusDays(price.getDurationDays());
 
-        if (existing.getExpirationDate().isAfter(LocalDate.now())) {
-            periodStart = existing.getExpirationDate();
-
-        } else {
-            periodStart = LocalDate.now();
-        }
-
-        LocalDate periodEnd = periodStart.plusDays(activePrice.getDurationDays());
-
-        log.info("creando nuevo payment");
         Payment payment = new Payment();
-        payment.setPaymentDate(LocalDate.now());
+        payment.setPaymentDate(today);
         payment.setPeriodStart(periodStart);
         payment.setPeriodEnd(periodEnd);
-        payment.setAmountPaid(activePrice.getAmount());
-        payment.setStudent(existing);
-        payment.setPrice(activePrice);
-
+        payment.setAmountPaid(price.getAmount()); // el monto sale del precio vigente, nunca del cliente
+        payment.setStudent(student);
+        payment.setPrice(price);
         paymentRepository.save(payment);
 
-        existing.setExpirationDate(periodEnd);
-        studentRepository.save(existing);
+        student.setExpirationDate(periodEnd);
 
+        log.info("Pago registrado id={} studentId={} periodo {} -> {}", payment.getId(), studentId,
+                periodStart, periodEnd);
         return paymentMapper.toDto(payment);
-
     }
 
     @Override
     public Page<PaymentResponse> studentPayments(Long studentId, Pageable pageable) {
-        log.info("Obteniendo el listado de pagos para el estudiante con id: {}", studentId);
-        return paymentRepository.findByStudentId(studentId, pageable)
+        if (!studentRepository.existsById(studentId)) {
+            throw new StudentNotFoundException();
+        }
+        return paymentRepository.findByStudentId(studentId, pageable).map(paymentMapper::toDto);
+    }
+
+    @Override
+    public Page<PaymentResponse> myPayments(String username, Pageable pageable) {
+        var user = userRepository.findWithStudentByUsername(username)
+                .orElseThrow(StudentNotFoundException::new);
+        if (user.getStudent() == null) {
+            throw new StudentNotFoundException();
+        }
+        return paymentRepository.findByStudentId(user.getStudent().getId(), pageable)
                 .map(paymentMapper::toDto);
     }
 
     @Override
     public Page<PaymentResponse> findAll(Pageable pageable) {
-        log.info("Obteniendo el listado de pagos");
-
-        return paymentRepository.findAll(pageable)
-                .map(paymentMapper::toDto);
+        return paymentRepository.findAll(pageable).map(paymentMapper::toDto);
     }
-
 }

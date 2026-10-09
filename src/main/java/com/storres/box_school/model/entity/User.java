@@ -45,7 +45,8 @@ public class User {
     private Boolean enabled = true;
 
     @OneToOne
-    @JoinColumn(name = "student_id", nullable = false)
+    // Nullable: las cuentas ADMIN no corresponden a un estudiante
+    @JoinColumn(name = "student_id", unique = true)
     private Student student;
 
 }

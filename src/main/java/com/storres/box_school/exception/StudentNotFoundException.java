@@ -1,8 +1,8 @@
 package com.storres.box_school.exception;
 
-public class StudentNotFoundExcepcion extends RuntimeException{
+public class StudentNotFoundException extends RuntimeException{
 
-    public StudentNotFoundExcepcion(){
+    public StudentNotFoundException(){
         super("El estudiante con el id ingresado no ha sido encontrado");
     }
 

@@ -1,9 +1,7 @@
 package com.storres.box_school.exception;
 
 public class PriceActiveNotFoundException extends RuntimeException {
-
-    public PriceActiveNotFoundException(){
-        super("No existe actualmente un precio activo");
+    public PriceActiveNotFoundException() {
+        super("No existe actualmente un precio activo para el tipo de pago solicitado");
     }
-
 }

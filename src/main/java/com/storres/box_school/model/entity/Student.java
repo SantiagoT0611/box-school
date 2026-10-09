@@ -1,7 +1,7 @@
 package com.storres.box_school.model.entity;
 
 import java.time.LocalDate;
-import java.util.List;
+import java.time.LocalDateTime;
 
 import com.storres.box_school.model.shared.Status;
 
@@ -12,8 +12,6 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.OneToMany;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import lombok.AllArgsConstructor;
@@ -52,12 +50,11 @@ public class Student {
     @Enumerated(EnumType.STRING)
     private Status status;
 
-    @OneToMany(mappedBy = "student")
-    private List<Payment> payments;
+    /** SHA-256 (hex) del codigo de registro de un solo uso entregado al estudiante. Nunca se guarda en claro. */
+    @Column(name = "registration_code_hash", length = 64)
+    private String registrationCodeHash;
 
-    @OneToMany(mappedBy = "student")
-    private List<Invoice> invoices;
+    @Column(name = "registration_code_expires_at")
+    private LocalDateTime registrationCodeExpiresAt;
 
-    @OneToOne(mappedBy = "student")
-    private User user;
 }

@@ -10,25 +10,21 @@ import com.storres.box_school.model.entity.Price;
 public class PriceMapper {
 
     public Price toEntity(PriceRequest info) {
-        var response = new Price();
-        response.setType(info.getType());
-        response.setAmount(info.getAmount());
-        response.setDurationDays(info.getDurationDays());
-        
-
-        return response;
-
+        var price = new Price();
+        price.setType(info.getType());
+        price.setAmount(info.getAmount());
+        price.setDurationDays(info.getDurationDays());
+        return price;
     }
 
     public PriceResponse toDto(Price price) {
         var dto = new PriceResponse();
+        dto.setId(price.getId());
         dto.setType(price.getType());
         dto.setAmount(price.getAmount());
         dto.setDurationDays(price.getDurationDays());
         dto.setActive(price.getActive());
         dto.setCreatedAt(price.getCreatedAt());
-
         return dto;
-
     }
 }

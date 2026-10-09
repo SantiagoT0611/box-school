@@ -32,13 +32,16 @@ build/
 ### VS Code ###
 .vscode/
 
-### Spring Boot sensitive files ###
-application.properties
-application.yml
-application-*.yml
+### Spring Boot local/sensitive files ###
+# application.yml SI se versiona: solo contiene ${VARIABLES}, nunca valores reales.
+# Cualquier override local con secretos va en estos archivos (ignorados):
+application-local.yml
+application-local.properties
+application-secret*.yml
 
 ### Environment variables ###
 .env
+!.env.example
 
 ### Logs ###
 *.log

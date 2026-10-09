@@ -6,11 +6,10 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
 import lombok.Setter;
 
+/** El estudiante al que se le registra el pago va en la URL, no en el cuerpo. */
 @Getter
 @Setter
 public class PaymentRequest {
-    @NotNull
-    private Long studentId;
     @NotNull
     private PaymentType type;
 }

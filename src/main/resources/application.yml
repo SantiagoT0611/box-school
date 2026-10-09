@@ -1,0 +1,87 @@
+# Configuracion base. NO contiene secretos: todo valor sensible llega por variables de entorno
+# (ver .env.example y docs/DECISIONS.md D-010). El perfil "dev" ajusta lo propio de desarrollo.
+spring:
+  application:
+    name: box-school
+
+  datasource:
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
+
+  jpa:
+    hibernate:
+      ddl-auto: validate        # el esquema lo gestiona Flyway; Hibernate solo valida que coincida
+    open-in-view: false
+    show-sql: false
+
+  flyway:
+    enabled: true
+    # Permite adoptar Flyway sobre una BD existente creada antes con ddl-auto=update (se toma como V1)
+    baseline-on-migrate: true
+    baseline-version: 1
+
+  # Correo: se activa SOLO si defines SPRING_MAIL_HOST (+ SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD).
+  # Sin host, la app arranca igual y los recordatorios se omiten con un warning.
+  mail:
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+          connectiontimeout: 5000
+          timeout: 5000
+          writetimeout: 5000
+
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+
+server:
+  shutdown: graceful
+  # "native" cuando haya un proxy/balanceador delante, para que el rate limit vea la IP real del cliente
+  forward-headers-strategy: ${FORWARD_HEADERS_STRATEGY:none}
+  error:
+    include-message: never
+    include-stacktrace: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  api-docs:
+    enabled: ${SWAGGER_ENABLED:false}
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED:false}
+
+jwt:
+  secret: ${JWT_SECRET}                          # Base64, minimo 32 bytes. Generar con util.GenerateJwtSecret
+  expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
+
+app:
+  timezone: ${APP_TIMEZONE:}                     # ej. America/Bogota. Vacio = zona del servidor
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}   # separados por coma
+  mail:
+    from: ${MAIL_FROM:}                          # vacio = usa SPRING_MAIL_USERNAME
+  membership-reminder:
+    enabled: ${REMINDER_ENABLED:true}
+    days-before-expiry: ${REMINDER_DAYS_BEFORE:2}
+    cron: ${REMINDER_CRON:0 0 8 * * *}           # segundos min hora dia mes dia-semana
+  registration:
+    code-validity-hours: ${REGISTRATION_CODE_HOURS:72}
+  rate-limit:
+    auth-requests-per-minute: ${AUTH_RATE_LIMIT_PER_MINUTE:10}
+  bootstrap-admin:
+    username: ${BOOTSTRAP_ADMIN_USERNAME:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}

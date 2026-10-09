@@ -7,12 +7,14 @@ import com.storres.box_school.model.dto.PaymentRequest;
 import com.storres.box_school.model.dto.PaymentResponse;
 
 public interface PaymentService {
- 
- PaymentResponse payMembership(PaymentRequest request, Long id);
 
- Page<PaymentResponse> studentPayments(Long studentId, Pageable pageable);
+    /** Registra el pago de una membresia y extiende el vencimiento del estudiante. */
+    PaymentResponse payMembership(PaymentRequest request, Long studentId);
 
- Page<PaymentResponse> findAll(Pageable pageable);
+    Page<PaymentResponse> studentPayments(Long studentId, Pageable pageable);
 
+    /** Historial de pagos del estudiante dueno de la cuenta autenticada. */
+    Page<PaymentResponse> myPayments(String username, Pageable pageable);
 
+    Page<PaymentResponse> findAll(Pageable pageable);
 }
