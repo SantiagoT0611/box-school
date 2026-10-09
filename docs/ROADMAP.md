@@ -46,26 +46,35 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 
 ---
 
-### ⬜ Fase 0 — Verificar en PostgreSQL real *(bloqueante)*
+### 🟦 Fase 0 — Verificar en PostgreSQL real *(bloqueante; en curso)*
 **Objetivo:** comprobar lo que H2 no puede (riesgos residuales del informe base).
 
-- [ ] Arranque con BD **limpia** (aplica V1 + V2).
-- [ ] Arranque con la BD **existente** (Flyway toma V1 como baseline y aplica V2).
-- [ ] Eliminar el usuario `admin` / `admin123` viejo y crear el admin con `BOOTSTRAP_ADMIN_*`.
-- [ ] Flujo manual con Swagger (perfil `dev`): crear precio → crear estudiante → registrar con código → pagar → `GET /students/me`.
-- [ ] Dos pagos simultáneos al mismo estudiante (valida el `PESSIMISTIC_WRITE`; el vencimiento debe sumar ambos).
-- [ ] Correo real (Mailtrap o Gmail con contraseña de aplicación): código de registro y `POST /api/notifications/membership-reminders/run`.
+**Hecho (2026-10-08)** — con respaldo previo (`backups/box-school_antes-de-flyway_*.sql`, fuera del repo) y una copia de la base para las pruebas de escritura:
+- [x] Arranque con la BD **existente**: Flyway toma V1 como baseline y aplica V2–V5; Hibernate `validate` pasa en PostgreSQL 18. Aplicado también a la base real (`box-school`): 4 estudiantes intactos, historial de Flyway V1–V5 sin errores.
+- [x] Recorrido completo por HTTP con [`scripts/smoke_test.py`](../scripts/smoke_test.py) (36 chequeos): precio → estudiante → registro con código → permisos 401/403 → pagos → deshabilitar. **36/36.**
+- [x] **Seis pagos simultáneos** al mismo estudiante: los 6 dan 201 y el vencimiento suma exactamente +180 días, periodos contiguos (valida `PESSIMISTIC_WRITE` en PostgreSQL real).
+- [x] Reproducción en test (`LegacySchemaRepairTest`) del esquema heredado de la base real.
+
+**Hallazgos de esta verificación** (H2 no podía mostrarlos; todos corregidos):
+1. 🔴 **Login roto para usuarios existentes:** `Salito` y `Sofi` tenían mayúsculas y el login normaliza a minúsculas → no habrían podido entrar. → `V3` normaliza usernames y emails (falla si hay colisiones, no pisa datos).
+2. 🔴 **Todo pago fallaba (409):** la tabla `payments` real tenía una columna heredada `amount NOT NULL` → `V4` la elimina.
+3. 🔴 **Todo pago fallaba (409):** `payments.price_id` tenía además una FK vieja hacia la tabla huérfana `price` → `V5`.
+4. 🟠 **`students.email` sin UNIQUE** en la base real (V1 sí lo define): permitía duplicados por carrera → `V5` lo agrega.
+- Causa común: `ddl-auto=update` deja restos y V1 asumía una base "limpia". `V5__repair_legacy_schema` (migración Java) compara con lo esperado y repara; es idempotente y falla en lugar de tocar datos.
+- La tabla huérfana `price` (vacía) queda en la base; se puede borrar a mano cuando quieras (`drop table price;`), no estorba.
+
+**Pendiente de la Fase 0**
+- [ ] Eliminar el usuario `admin` (clave `admin123`, del seeder viejo) de la base real y dejar a `salito` como administrador (o crear otro con `BOOTSTRAP_ADMIN_*`). *Requiere confirmación del dueño.*
+- [ ] Correo real (Mailtrap o Gmail con contraseña de aplicación): código de registro y `POST /api/notifications/membership-reminders/run`. Las variables de correo (`SPRING_MAIL_*`) **no están definidas** aún.
 - [ ] Definir `APP_TIMEZONE=America/Bogota` (confirmar con el dueño).
-- [ ] *(Opcional, si hay Docker)* Testcontainers con PostgreSQL en los tests (O-7).
-
-**Puerta de calidad:** enfocada en configuración y despliegue (secretos, perfiles, logs, valores por defecto inseguros).
-
----
+- [ ] Puerto: Docker Desktop ocupa el **8080** en esta máquina; arrancar la app con `SERVER_PORT=8082` (o liberar el puerto).
+- [ ] *(Docker está instalado)* Testcontainers con PostgreSQL en los tests (O-7): evita depender de H2 para locks y esquemas heredados.
+- [ ] **Puerta de calidad** de la fase con auditor independiente (foco: migraciones, configuración, despliegue, secretos) → `docs/audits/FASE-0-verificacion-postgres.md`.
 
 ### ⬜ Fase 1 — Recuperar y cambiar contraseña (O-5)
 **Objetivo:** que un estudiante que olvidó su clave pueda recuperarla sin intervención del admin, sin abrir huecos de seguridad.
 
-- [ ] Migración `V3`: tabla `password_reset_tokens` (hash SHA-256, expira a los 30 min, uso único) y columna `users.password_changed_at`.
+- [ ] Migración `V6`: tabla `password_reset_tokens` (hash SHA-256, expira a los 30 min, uso único) y columna `users.password_changed_at`.
 - [ ] `POST /api/auth/forgot-password`: siempre responde **202 genérico** (no revela si el email existe), con rate limit, envía correo.
 - [ ] `POST /api/auth/reset-password` (token + nueva clave).
 - [ ] `POST /api/auth/change-password` (autenticado; pide la clave actual).
@@ -80,7 +89,7 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 ### ⬜ Fase 2 — Pagos con dos modalidades (O-1)
 **Principio (D-017/D-018):** un pago **solo extiende la membresía cuando queda `APPROVED`**. Nunca por el redirect del navegador ni por datos que envíe el cliente; el monto sale siempre del precio vigente.
 
-#### 2a. Modelo y migración `V4`
+#### 2a. Modelo y migración `V7`
 - [ ] `payments` gana: `status` (`PENDING|APPROVED|REJECTED`; filas existentes → `APPROVED`), `method` (`CASH|BANK_TRANSFER|GATEWAY`), `reference`, `proof_image` (opcional), `reviewed_by`, `reviewed_at`, `rejection_reason`. `period_start/end` pasan a nullable hasta aprobar.
 - [ ] Tabla `payment_settings` (una fila): banco, tipo y número de cuenta, titular, documento, instrucciones, imagen del **QR**, flags `transfer_enabled` y `gateway_enabled`.
 - [ ] Refactor: extraer de `PaymentServiceImpl.payMembership` el cálculo de periodo + `findByIdForUpdate` a un `approve(payment)` reutilizable por las tres modalidades.
