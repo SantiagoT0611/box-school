@@ -87,7 +87,7 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 - [ ] 🟡 **M-2** Idempotencia de pagos → se hace en la Fase 2 (`reference` UNIQUE / `Idempotency-Key`); excepción temporal registrada.
 - [x] 🔵 Corregidos: B-2 (clave en bytes), B-3 (reclamo siempre liberado), B-4 (pausa tras fallo), B-5 (sin PII/traza en 409), B-6 (log de IP en 401/429), B-9 (`baseline` apagado), B-11 (`User.student` LAZY, índice redundante), B-12 (`Locale.ROOT`), B-13 (`exp` obligatorio), B-14 (HMAC con pimienta), B-17 (`/error`).
 - [ ] 🔵 Aceptados/aplazados (registrados): B-1 (oráculo de tiempo en cuentas deshabilitadas), B-7 (smoke documentado), B-8 (docs actualizadas en esta tanda), B-10 (V5 sin checksum, anotado), B-15 (rate limit por cuenta: con Redis, O-6), B-16 (`@Scheduled` de 1 hilo: hay un solo job).
-- [ ] **Re-ejecutar los tests de PostgreSQL con Docker** (Docker Desktop estaba apagado al implementar): `PostgresLegacyUpgradeTest` (5 tests, incluye A-2 y M-1).
+- [x] **Tests de PostgreSQL real ejecutados con Docker (2026-10-11): 61/61, 0 omitidos.** `PostgresLegacyUpgradeTest` 5/5 (incluye A-2 y M-1). Validados por mutación: con la columna `active_type` desincronizada A-2 falla en la primera ronda; sin el bloqueo de fila M-1 falla 3 de 3 intentos.
 - [ ] **Re-auditoría acotada e independiente** de lo corregido antes de marcar la fase como cerrada.
 
 ### ⬜ Fase 1 — Recuperar y cambiar contraseña (O-5)
