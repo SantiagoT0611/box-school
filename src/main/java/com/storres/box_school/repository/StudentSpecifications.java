@@ -23,7 +23,7 @@ public final class StudentSpecifications {
             if (text == null || text.isBlank()) {
                 return null;
             }
-            String pattern = "%" + escapeLike(text.trim().toLowerCase()) + "%";
+            String pattern = "%" + escapeLike(text.trim().toLowerCase(java.util.Locale.ROOT)) + "%";
             return cb.or(
                     cb.like(cb.lower(root.get("firstName")), pattern, ESCAPE),
                     cb.like(cb.lower(root.get("lastName")), pattern, ESCAPE),

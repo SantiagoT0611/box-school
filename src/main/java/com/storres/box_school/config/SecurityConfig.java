@@ -24,6 +24,7 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.storres.box_school.security.JwtAuthenticationFilter;
 import com.storres.box_school.security.RateLimitFilter;
+import com.storres.box_school.security.RequestSizeLimitFilter;
 import com.storres.box_school.security.RestAccessDeniedHandler;
 import com.storres.box_school.security.RestAuthenticationEntryPoint;
 
@@ -53,8 +54,14 @@ public class SecurityConfig {
                         .accessDeniedHandler(accessDeniedHandler))
                 // Primera capa de autorizacion por URL; los @PreAuthorize de los controllers son la segunda.
                 .authorizeHttpRequests(authz -> authz
+                        // El despacho de error (/error) no debe volver a pasar por la autenticacion: sin esto un
+                        // 400 del firewall o un 404 se veian como un 401 enganoso (auditoria Fase 0, B-17).
+                        // No expone nada: server.error.include-message/stacktrace = never.
+                        .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll()
-                        .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // Solo las sondas de vida/disponibilidad son publicas (no tocan SMTP ni datos).
+                        // /actuator/health agregado exige autenticacion (auditoria Fase 0, A-3).
+                        .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                         // Autoservicio del estudiante autenticado
                         .requestMatchers(HttpMethod.GET, "/api/students/me", "/api/payments/me",
@@ -63,6 +70,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/students/**", "/api/payments/**", "/api/prices/**",
                                 "/api/notifications/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
+                .addFilterBefore(new RequestSizeLimitFilter(objectMapper), UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new RateLimitFilter(props.rateLimit().authRequestsPerMinute(), objectMapper),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

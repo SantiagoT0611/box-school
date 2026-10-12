@@ -30,11 +30,20 @@ public class PriceServiceImpl implements PriceService {
     private final PriceMapper priceMapper;
     private final Clock clock;
 
+    /**
+     * La garantia de "un solo precio activo por tipo" la da el indice UNIQUE de V6, no este metodo:
+     * si dos peticiones llegan a la vez, una confirma y la otra recibe 409 (DataIntegrityViolation).
+     * El bloqueo de fila solo evita trabajo inutil en el caso comun.
+     */
     @Override
     @Transactional
     public PriceResponse createPrice(PriceRequest request) {
-        // Bloqueo de fila: dos admins creando a la vez no pueden dejar dos precios activos del mismo tipo
-        priceRepository.findActiveForUpdate(request.getType()).ifPresent(previous -> previous.setActive(false));
+        priceRepository.findActiveForUpdate(request.getType()).ifPresent(previous -> {
+            previous.setActive(false);
+            // flush explicito: Hibernate ejecuta los INSERT antes que los UPDATE, y el nuevo activo
+            // chocaria con el indice UNIQUE mientras el anterior siga marcado como activo
+            priceRepository.saveAndFlush(previous);
+        });
 
         Price newPrice = priceMapper.toEntity(request);
         newPrice.setActive(true);

@@ -68,9 +68,11 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     // ---- Seguridad -----------------------------------------------------------------------
 
     @ExceptionHandler(AuthenticationException.class)
-    public ResponseEntity<ApiErrorResponse> handleAuthentication(AuthenticationException ex) {
-        // BadCredentials, Disabled, Locked...: mismo mensaje para no revelar si el usuario existe
-        log.warn("Autenticacion fallida: {}", ex.getClass().getSimpleName());
+    public ResponseEntity<ApiErrorResponse> handleAuthentication(AuthenticationException ex,
+            jakarta.servlet.http.HttpServletRequest request) {
+        // BadCredentials, Disabled, Locked...: mismo mensaje para no revelar si el usuario existe.
+        // En el log si queda el tipo y la IP para poder detectar fuerza bruta (el usuario no se registra).
+        log.warn("Autenticacion fallida: tipo={} ip={}", ex.getClass().getSimpleName(), request.getRemoteAddr());
         return build(HttpStatus.UNAUTHORIZED, "Credenciales incorrectas o cuenta deshabilitada");
     }
 
@@ -107,7 +109,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     public ResponseEntity<ApiErrorResponse> handleDataIntegrity(DataIntegrityViolationException ex) {
-        log.warn("Violacion de integridad de datos", ex);
+        // Sin traza ni mensaje del driver: incluyen los valores (p. ej. el email duplicado)
+        log.warn("Violacion de integridad de datos: {}", ex.getMostSpecificCause().getClass().getSimpleName());
         return build(HttpStatus.CONFLICT, "La operacion entra en conflicto con datos existentes");
     }
 

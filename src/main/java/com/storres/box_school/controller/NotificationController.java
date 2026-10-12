@@ -2,6 +2,7 @@ package com.storres.box_school.controller;
 
 import java.util.Map;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,10 +20,17 @@ public class NotificationController {
 
     private final MembershipReminderService reminderService;
 
-    /** Ejecuta el envio de recordatorios ahora mismo (el job programado hace lo mismo cada dia). Idempotente. */
+    /**
+     * Dispara el envio de recordatorios ahora mismo (el job programado hace lo mismo cada dia).
+     * Responde de inmediato: el lote corre en segundo plano porque, con la pausa entre correos, puede
+     * tardar minutos (un proxy cortaria la peticion). Idempotente: no repite avisos ya enviados.
+     */
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/membership-reminders/run")
-    public ResponseEntity<Map<String, Integer>> runMembershipReminders() {
-        return ResponseEntity.ok(Map.of("sent", reminderService.sendDueReminders()));
+    public ResponseEntity<Map<String, String>> runMembershipReminders() {
+        if (reminderService.triggerAsync()) {
+            return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("status", "started"));
+        }
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("status", "already-running"));
     }
 }

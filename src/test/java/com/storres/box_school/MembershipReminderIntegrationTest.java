@@ -27,6 +27,7 @@ import com.storres.box_school.service.MailService;
 import com.storres.box_school.service.MembershipReminderService;
 
 /** Sin @Transactional a proposito: el servicio hace commits cortos por estudiante, igual que en produccion. */
+@HermeticTest
 @SpringBootTest
 class MembershipReminderIntegrationTest {
 

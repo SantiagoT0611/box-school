@@ -12,6 +12,8 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -52,4 +54,17 @@ public class Price {
     @NotNull
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
+
+    /**
+     * = type mientras el precio esta activo; NULL si no. Con el indice UNIQUE de V6 la base garantiza
+     * un unico precio activo por tipo aunque dos peticiones lleguen a la vez. No se asigna a mano.
+     */
+    @Column(name = "active_type", length = 50)
+    private String activeType;
+
+    @PrePersist
+    @PreUpdate
+    void syncActiveType() {
+        this.activeType = Boolean.TRUE.equals(active) && type != null ? type.name() : null;
+    }
 }

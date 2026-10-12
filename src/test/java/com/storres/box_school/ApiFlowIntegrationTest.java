@@ -35,6 +35,7 @@ import com.storres.box_school.service.MailService;
  * Recorre la API real (seguridad, validacion, negocio, BD con las migraciones Flyway) sobre H2.
  * Cada test corre en una transaccion que se revierte al terminar.
  */
+@HermeticTest
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
@@ -259,6 +260,43 @@ class ApiFlowIntegrationTest {
         mvc.perform(get("/api/prices/active").header("Authorization", bearer(adminToken)))
                 .andExpect(jsonPath("$.length()").value(1));
         postJson("/api/prices", adminToken, priceBody("MONTHLY", "-5", 30)).andExpect(status().isBadRequest());
+    }
+
+    // ---------------------------------------------------------------- regresiones de la auditoria (Fase 0)
+
+    @Test
+    void priceBoundsRejectAbsurdValuesWith400() throws Exception {
+        // M-3: antes pasaban y luego TODO pago de ese tipo fallaba con 409 (fecha fuera de rango)
+        postJson("/api/prices", adminToken, Map.of("type", "MONTHLY", "amount", 50000, "durationDays", 2147483647))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors.durationDays").exists());
+        postJson("/api/prices", adminToken, Map.of("type", "MONTHLY", "amount", 50000, "durationDays", 367))
+                .andExpect(status().isBadRequest());
+        postJson("/api/prices", adminToken, Map.of("type", "MONTHLY", "amount", new java.math.BigDecimal("1e30"), "durationDays", 30))
+                .andExpect(status().isBadRequest()).andExpect(jsonPath("$.errors.amount").exists());
+        postJson("/api/prices", adminToken, Map.of("type", "MONTHLY", "amount", 50000, "durationDays", 366))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    void passwordLongerThan72BytesIsRejectedWith400NotAnInternalError() throws Exception {
+        // B-2: 72 caracteres "n con tilde" son 144 bytes; BCrypt lanzaba IllegalArgumentException (500)
+        postJson("/api/auth/register", null, Map.of("username", "usuario1", "password", "ñ".repeat(72),
+                "email", "alguien@test.com", "registrationCode", "ABCDEFGHJK"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors.passwordWithinBcryptLimit").exists());
+    }
+
+    @Test
+    void reminderEndpointRespondsAcceptedImmediatelyAndRequiresAdmin() throws Exception {
+        // M-4: ya no retiene el hilo HTTP todo el lote; arranca en segundo plano y responde 202
+        mvc.perform(post("/api/notifications/membership-reminders/run").header("Authorization", bearer(adminToken)))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.status").value("started"));
+
+        Created ana = createStudent("ana@test.com");
+        String anaToken = register(ana, "ana");
+        mvc.perform(post("/api/notifications/membership-reminders/run").header("Authorization", bearer(anaToken)))
+                .andExpect(status().isForbidden());
     }
 
     // ---------------------------------------------------------------- helpers

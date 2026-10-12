@@ -5,6 +5,7 @@ import com.storres.box_school.model.shared.Roles;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -44,7 +45,7 @@ public class User {
     @Column(nullable = false)
     private Boolean enabled = true;
 
-    @OneToOne
+    @OneToOne(fetch = FetchType.LAZY)
     // Nullable: las cuentas ADMIN no corresponden a un estudiante
     @JoinColumn(name = "student_id", unique = true)
     private Student student;

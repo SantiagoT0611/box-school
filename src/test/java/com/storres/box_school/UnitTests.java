@@ -31,6 +31,8 @@ import com.storres.box_school.service.RegistrationCodeService;
 
 class UnitTests {
 
+    private static final String TEST_SECRET = "dGVzdC1vbmx5LXNlY3JldC1rZXktdGVzdC1vbmx5LXNlY3JldC1rZXktMDEyMzQ1Njc4OQ==";
+
     private static AppProperties props(String adminUser, String adminPass) {
         return new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(""),
                 new AppProperties.MembershipReminder(false, 2, "0 0 8 * * *", 0),
@@ -44,7 +46,7 @@ class UnitTests {
 
         @Test
         void issuedCodeMatchesOnlyUntilExpiryAndNeverStoresPlainText() {
-            var service = new RegistrationCodeService(fixed, props("", ""));
+            var service = new RegistrationCodeService(fixed, props("", ""), TEST_SECRET);
             var student = new Student();
 
             var issued = service.issueFor(student);
@@ -57,13 +59,13 @@ class UnitTests {
             assertThat(service.matches(student, null)).isFalse();
 
             var afterExpiry = new RegistrationCodeService(
-                    Clock.fixed(Instant.parse("2026-01-14T12:00:00Z"), ZoneOffset.UTC), props("", ""));
+                    Clock.fixed(Instant.parse("2026-01-14T12:00:00Z"), ZoneOffset.UTC), props("", ""), TEST_SECRET);
             assertThat(afterExpiry.matches(student, issued.registrationCode())).isFalse();
         }
 
         @Test
         void consumedCodeNoLongerMatches() {
-            var service = new RegistrationCodeService(fixed, props("", ""));
+            var service = new RegistrationCodeService(fixed, props("", ""), TEST_SECRET);
             var student = new Student();
             var issued = service.issueFor(student);
 
@@ -103,6 +105,65 @@ class UnitTests {
             var other = serviceWith("b3RyYS1jbGF2ZS1kaXN0aW50YS1wYXJhLWxhLXBydWViYS0wMTIzNDU2Nzg5MDEyMzQ1");
             assertThatThrownBy(() -> service.extractUsername(other.generateToken(user)))
                     .isInstanceOf(io.jsonwebtoken.JwtException.class);
+        }
+    }
+
+    @Nested
+    class JwtClaims {
+        private final JwtService service = jwtService();
+
+        private JwtService jwtService() {
+            var s = new JwtService();
+            ReflectionTestUtils.setField(s, "secretKey", TEST_SECRET);
+            ReflectionTestUtils.setField(s, "expirationMinutes", 5L);
+            ReflectionTestUtils.invokeMethod(s, "init");
+            return s;
+        }
+
+        private String tokenWith(java.util.function.Consumer<io.jsonwebtoken.JwtBuilder> customizer) {
+            var key = io.jsonwebtoken.security.Keys.hmacShaKeyFor(io.jsonwebtoken.io.Decoders.BASE64.decode(TEST_SECRET));
+            var builder = io.jsonwebtoken.Jwts.builder().subject("ana");
+            customizer.accept(builder);
+            return builder.signWith(key).compact();
+        }
+
+        @Test
+        void tokenWithAnotherIssuerIsRejected() {
+            String token = tokenWith(b -> b.issuer("otro-sistema")
+                    .expiration(new java.util.Date(System.currentTimeMillis() + 60_000)));
+
+            assertThatThrownBy(() -> service.extractUsername(token)).isInstanceOf(io.jsonwebtoken.JwtException.class);
+        }
+
+        @Test
+        void tokenWithoutIssuerIsRejected() {
+            String token = tokenWith(b -> b.expiration(new java.util.Date(System.currentTimeMillis() + 60_000)));
+
+            assertThatThrownBy(() -> service.extractUsername(token)).isInstanceOf(io.jsonwebtoken.JwtException.class);
+        }
+
+        @Test
+        void expiredTokenIsRejected() {
+            String token = tokenWith(b -> b.issuer("box-school")
+                    .expiration(new java.util.Date(System.currentTimeMillis() - 1_000)));
+
+            assertThatThrownBy(() -> service.extractUsername(token)).isInstanceOf(io.jsonwebtoken.ExpiredJwtException.class);
+        }
+
+        @Test
+        void tokenWithoutExpirationIsRejectedEvenIfSignedAndWithTheRightIssuer() {
+            // B-13: un token firmado sin "exp" valdria para siempre
+            String token = tokenWith(b -> b.issuer("box-school"));
+
+            assertThatThrownBy(() -> service.extractUsername(token)).isInstanceOf(io.jsonwebtoken.JwtException.class);
+        }
+
+        @Test
+        void validTokenIsAccepted() {
+            String token = tokenWith(b -> b.issuer("box-school")
+                    .expiration(new java.util.Date(System.currentTimeMillis() + 60_000)));
+
+            assertThat(service.extractUsername(token)).isEqualTo("ana");
         }
     }
 

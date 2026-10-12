@@ -10,6 +10,11 @@ Variables de entorno:
   ADMIN_USERNAME  usuario administrador existente           (obligatorio)
   ADMIN_PASSWORD  su clave                                  (obligatorio)
   PARALLEL_PAYMENTS  pagos simultaneos al mismo alumno      (default 6)
+  EXPECT_SWAGGER     "true" si la instancia corre con perfil dev / SWAGGER_ENABLED=true (default false:
+                     entonces Swagger DEBE responder 404)
+
+El script llama ~8 veces a /api/auth/*: arranca la instancia de prueba con AUTH_RATE_LIMIT_PER_MINUTE=1000
+para poder repetirlo sin tropezar con el limite (429).
 
 Uso:  ADMIN_USERNAME=... ADMIN_PASSWORD=... BASE_URL=http://localhost:8081 python scripts/smoke_test.py
 Sale con codigo 1 si algun chequeo falla.
@@ -27,6 +32,7 @@ BASE = os.environ.get("BASE_URL", "http://localhost:8080").rstrip("/")
 ADMIN_USER = os.environ.get("ADMIN_USERNAME")
 ADMIN_PASS = os.environ.get("ADMIN_PASSWORD")
 PARALLEL = int(os.environ.get("PARALLEL_PAYMENTS", "6"))
+EXPECT_SWAGGER = os.environ.get("EXPECT_SWAGGER", "false").lower() == "true"
 
 if not ADMIN_USER or not ADMIN_PASS:
     sys.exit("Define ADMIN_USERNAME y ADMIN_PASSWORD (ver docstring).")
@@ -64,10 +70,15 @@ def main():
     username = f"smoke{stamp}"
 
     # --- infraestructura y exposicion
-    s, b = call("GET", "/actuator/health")
-    check("health UP", s == 200 and b.get("status") == "UP", str(b))
-    s, _ = call("GET", "/swagger-ui.html")
-    check("swagger apagado (si no es perfil dev)", s in (401, 404, 200), f"status={s}")
+    s, b = call("GET", "/actuator/health/liveness")
+    check("sonda liveness publica y UP", s == 200 and b.get("status") == "UP", str(b))
+    s, _ = call("GET", "/actuator/health")
+    check("health agregado exige autenticacion (no consulta SMTP en anonimo)", s == 401, f"status={s}")
+    s, _ = call("GET", "/v3/api-docs")
+    if EXPECT_SWAGGER:
+        check("swagger encendido (perfil dev)", s == 200, f"status={s}")
+    else:
+        check("swagger apagado: /v3/api-docs -> 404", s == 404, f"status={s}")
 
     # --- autenticacion basica
     s, b = call("GET", "/api/students/me")
@@ -158,7 +169,8 @@ def main():
 
     # --- recordatorios (no verifica el envio real de correo)
     s, b = call("POST", "/api/notifications/membership-reminders/run", token=adm)
-    check("recordatorios se ejecutan sin romper", s == 200 and "sent" in b, str(b))
+    check("recordatorios se disparan en segundo plano (202) o ya estan en curso (409)",
+          s in (202, 409) and isinstance(b, dict) and b.get("status") in ("started", "already-running"), str(b))
 
     # --- deshabilitar corta el acceso
     s, b = call("PATCH", f"/api/students/{sid}/deactivate", token=adm)

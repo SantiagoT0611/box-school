@@ -17,8 +17,10 @@ spring:
 
   flyway:
     enabled: true
-    # Permite adoptar Flyway sobre una BD existente creada antes con ddl-auto=update (se toma como V1)
-    baseline-on-migrate: true
+    # SOLO para la primera adopcion de una BD creada antes de Flyway con ddl-auto=update (se toma como V1).
+    # Apagado por defecto: con una base ajena y no vacia marcaria un baseline en la base equivocada.
+    # Primera vez en una base heredada: FLYWAY_BASELINE_ON_MIGRATE=true (ver README).
+    baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:false}
     baseline-version: 1
 
   # Correo: se activa SOLO si defines SPRING_MAIL_HOST (+ SPRING_MAIL_PORT, SPRING_MAIL_USERNAME, SPRING_MAIL_PASSWORD).
@@ -49,6 +51,9 @@ server:
     include-stacktrace: never
 
 management:
+  health:
+    mail:
+      enabled: false   # el indicador de correo abriria una conexion SMTP por cada consulta de salud
   endpoints:
     web:
       exposure:
@@ -69,7 +74,7 @@ jwt:
   expiration-minutes: ${JWT_EXPIRATION_MINUTES:120}
 
 app:
-  timezone: ${APP_TIMEZONE:}                     # ej. America/Bogota. Vacio = zona del servidor
+  timezone: ${APP_TIMEZONE:America/Bogota}       # zona del negocio; no depender de la del servidor (la nube suele estar en UTC)
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:4200}   # separados por coma
   mail:

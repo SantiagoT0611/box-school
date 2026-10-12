@@ -92,7 +92,9 @@ public class StudentServiceImpl implements StudentService {
     @Override
     @Transactional
     public StudentResponse updateStudent(Long id, StudentRequest request) {
-        Student student = findOrThrow(id);
+        // Con bloqueo de fila: sin el, Hibernate reescribe expiration_date con el valor leido al inicio y
+        // pisaba un pago confirmado entre medio (auditoria Fase 0, M-1).
+        Student student = findOrThrowForUpdate(id);
 
         String newEmail = StudentMapper.normalizeEmail(request.getEmail());
         if (!newEmail.equals(student.getEmail()) && studentRepository.existsByEmail(newEmail)) {
@@ -148,7 +150,7 @@ public class StudentServiceImpl implements StudentService {
      * "deshabilitar" un estudiante debe cortarle el acceso de verdad (ver D-007).
      */
     private StudentResponse changeStatus(Long id, Status status) {
-        Student student = findOrThrow(id);
+        Student student = findOrThrowForUpdate(id); // mismo motivo que updateStudent (M-1)
         if (student.getStatus() != status) {
             student.setStatus(status);
             userRepository.findByStudentId(id).ifPresent(user -> user.setEnabled(status == Status.ACTIVE));
@@ -159,6 +161,10 @@ public class StudentServiceImpl implements StudentService {
 
     private Student findOrThrow(Long id) {
         return studentRepository.findById(id).orElseThrow(StudentNotFoundException::new);
+    }
+
+    private Student findOrThrowForUpdate(Long id) {
+        return studentRepository.findByIdForUpdate(id).orElseThrow(StudentNotFoundException::new);
     }
 
     private void sendRegistrationCode(Student student, RegistrationCodeResponse code) {

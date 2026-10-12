@@ -46,3 +46,6 @@ application-secret*.yml
 ### Logs ###
 *.log
 logs/
+
+### Claude Code (worktrees de agentes, locales) ###
+.claude/worktrees/

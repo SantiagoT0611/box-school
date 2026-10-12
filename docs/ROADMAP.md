@@ -46,7 +46,7 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 
 ---
 
-### 🟦 Fase 0 — Verificar en PostgreSQL real *(bloqueante; en curso)*
+### 🟥 Fase 0 — Verificar en PostgreSQL real *(REABIERTA por la auditoría: 3 hallazgos altos abiertos)*
 **Objetivo:** comprobar lo que H2 no puede (riesgos residuales del informe base).
 
 **Hecho (2026-10-08)** — con respaldo previo (`backups/box-school_antes-de-flyway_*.sql`, fuera del repo) y una copia de la base para las pruebas de escritura:
@@ -69,12 +69,31 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 - [x] Correo con **Mailtrap** (SMTP real; bandeja de pruebas): el servidor envía el código de registro y los recordatorios; con la pausa de 11 s entre correos, 2 de 2 enviados en una corrida y 0 en la segunda (idempotente). **Hallazgo:** el plan gratis de Mailtrap rechaza ráfagas (`550 Too many emails per second`, incluso a 1 envío/s); el servicio liberó el registro y lo reenvió en el ciclo siguiente, como se diseñó → se añadió `app.membership-reminder.delay-between-emails-ms` (por defecto 1000 ms, `REMINDER_DELAY_MS`). Para probar en la sandbox gratuita usar `REMINDER_DELAY_MS=11000`.
 - [x] El dueño confirmó en su bandeja de Mailtrap la llegada de los correos (código de registro y avisos). Se corrigieron tildes y formato de fecha; `MailServiceTest` cubre remitente y UTF-8. **Antes de producción definir `MAIL_FROM`.**
 - [ ] Puerto: Docker Desktop ocupa el **8080** en esta máquina; arrancar la app con `SERVER_PORT=8082` (o liberar el puerto).
-- [ ] **Puerta de calidad** de la fase con auditor independiente (foco: migraciones, configuración, despliegue, secretos) → `docs/audits/FASE-0-verificacion-postgres.md`.
+- [x] **Puerta de calidad ejecutada** (auditor independiente, 2026-10-08) → [audits/FASE-0-verificacion-postgres.md](audits/FASE-0-verificacion-postgres.md). **Resultado: ❌ fase REABIERTA** (🔴 0 · 🟠 3 · 🟡 11 · 🔵 17). El diff de la Fase 0 no introduce críticos ni altos; los 3 altos son de la línea base, nunca revisada de forma independiente.
+
+**Corrección de la auditoría (obligatoria para cerrar)** — implementada el 2026-10-11, pendiente de re-auditoría. Los tests de ataque del auditor pasan a ser regresión permanente (`RateLimitIntegrationTest`, `SecurityHardeningTest`, `PriceUniquenessTest`, `DatabaseOutageTest`, `MembershipReminderServiceTest`, y nuevos casos en `ApiFlowIntegrationTest`, `UnitTests` y `PostgresLegacyUpgradeTest`).
+- [x] 🟠 **A-1** Rate limit por ruta decodificada (`getServletPath`) → `RateLimitIntegrationTest` sobre Tomcat real con variantes codificadas.
+- [x] 🟠 **A-2** Un precio activo por tipo garantizado por la BD (`V6`, `prices.active_type` UNIQUE) → `PriceUniquenessTest` (H2) y carrera real en `PostgresLegacyUpgradeTest` *(este último requiere Docker; ver pendiente)*.
+- [x] 🟠 **A-3** Solo `liveness`/`readiness` públicos y `management.health.mail.enabled=false` → `SecurityHardeningTest`.
+- [x] 🟡 **M-1** `updateStudent`/`changeStatus` con bloqueo de fila → regresión concurrente en `PostgresLegacyUpgradeTest` *(Docker)*.
+- [x] 🟡 **M-3** Cotas en `PriceRequest` (≤366 días, monto ≤ 8 enteros) → `ApiFlowIntegrationTest#priceBounds…`.
+- [x] 🟡 **M-4** Recordatorios: 202 inmediato + candado contra ejecuciones solapadas → `MembershipReminderServiceTest`, `ApiFlowIntegrationTest`.
+- [x] 🟡 **M-7** Caída de BD al validar el token → 503 → `DatabaseOutageTest`.
+- [x] 🟡 **M-8** Límite de cuerpo 64 KB + tope de strings JSON → `SecurityHardeningTest`.
+- [x] 🟡 **M-9** Tests herméticos (`@HermeticTest`, perfil `test` sobre el `application.yml` real).
+- [x] 🟡 **M-10** Cobertura: pausa, 429, `iss`/`exp` del JWT, smoke test exige Swagger 404 y sondas.
+- [x] 🟡 **M-11** `.env.example` (perfil vacío, `FORWARD_HEADERS_STRATEGY`, `FLYWAY_BASELINE_ON_MIGRATE`), `APP_TIMEZONE` por defecto `America/Bogota`.
+- [x] 🟡 **M-5 / M-6** Excepción registrada en D-012 con las consultas previas obligatorias (V3/V4 no se editan).
+- [ ] 🟡 **M-2** Idempotencia de pagos → se hace en la Fase 2 (`reference` UNIQUE / `Idempotency-Key`); excepción temporal registrada.
+- [x] 🔵 Corregidos: B-2 (clave en bytes), B-3 (reclamo siempre liberado), B-4 (pausa tras fallo), B-5 (sin PII/traza en 409), B-6 (log de IP en 401/429), B-9 (`baseline` apagado), B-11 (`User.student` LAZY, índice redundante), B-12 (`Locale.ROOT`), B-13 (`exp` obligatorio), B-14 (HMAC con pimienta), B-17 (`/error`).
+- [ ] 🔵 Aceptados/aplazados (registrados): B-1 (oráculo de tiempo en cuentas deshabilitadas), B-7 (smoke documentado), B-8 (docs actualizadas en esta tanda), B-10 (V5 sin checksum, anotado), B-15 (rate limit por cuenta: con Redis, O-6), B-16 (`@Scheduled` de 1 hilo: hay un solo job).
+- [ ] **Re-ejecutar los tests de PostgreSQL con Docker** (Docker Desktop estaba apagado al implementar): `PostgresLegacyUpgradeTest` (5 tests, incluye A-2 y M-1).
+- [ ] **Re-auditoría acotada e independiente** de lo corregido antes de marcar la fase como cerrada.
 
 ### ⬜ Fase 1 — Recuperar y cambiar contraseña (O-5)
 **Objetivo:** que un estudiante que olvidó su clave pueda recuperarla sin intervención del admin, sin abrir huecos de seguridad.
 
-- [ ] Migración `V6`: tabla `password_reset_tokens` (hash SHA-256, expira a los 30 min, uso único) y columna `users.password_changed_at`.
+- [ ] Migración `V7`: tabla `password_reset_tokens` (hash SHA-256, expira a los 30 min, uso único) y columna `users.password_changed_at`.
 - [ ] `POST /api/auth/forgot-password`: siempre responde **202 genérico** (no revela si el email existe), con rate limit, envía correo.
 - [ ] `POST /api/auth/reset-password` (token + nueva clave).
 - [ ] `POST /api/auth/change-password` (autenticado; pide la clave actual).
@@ -89,7 +108,7 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 ### ⬜ Fase 2 — Pagos con dos modalidades (O-1)
 **Principio (D-017/D-018):** un pago **solo extiende la membresía cuando queda `APPROVED`**. Nunca por el redirect del navegador ni por datos que envíe el cliente; el monto sale siempre del precio vigente.
 
-#### 2a. Modelo y migración `V7`
+#### 2a. Modelo y migración `V8`
 - [ ] `payments` gana: `status` (`PENDING|APPROVED|REJECTED`; filas existentes → `APPROVED`), `method` (`CASH|BANK_TRANSFER|GATEWAY`), `reference`, `proof_image` (opcional), `reviewed_by`, `reviewed_at`, `rejection_reason`. `period_start/end` pasan a nullable hasta aprobar.
 - [ ] Tabla `payment_settings` (una fila): banco, tipo y número de cuenta, titular, documento, instrucciones, imagen del **QR**, flags `transfer_enabled` y `gateway_enabled`.
 - [ ] Refactor: extraer de `PaymentServiceImpl.payMembership` el cálculo de periodo + `findByIdForUpdate` a un `approve(payment)` reutilizable por las tres modalidades.

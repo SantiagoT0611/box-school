@@ -33,7 +33,7 @@ public class StudentMapper {
     }
 
     public static String normalizeEmail(String email) {
-        return email == null ? null : email.trim().toLowerCase();
+        return email == null ? null : email.trim().toLowerCase(java.util.Locale.ROOT);
     }
 
     public StudentResponse toDto(Student student) {

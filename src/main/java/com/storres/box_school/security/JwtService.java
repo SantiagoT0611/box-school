@@ -77,11 +77,16 @@ public class JwtService {
     }
 
     private Claims extractAllClaims(String token) {
-        return Jwts.parser()
+        Claims claims = Jwts.parser()
                 .verifyWith(signKey)
                 .requireIssuer(ISSUER)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+        // JJWT valida "exp" solo si viene; un token firmado sin expiracion valdria para siempre
+        if (claims.getExpiration() == null) {
+            throw new io.jsonwebtoken.MalformedJwtException("El token no tiene fecha de expiracion");
+        }
+        return claims;
     }
 }

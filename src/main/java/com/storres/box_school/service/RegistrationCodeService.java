@@ -1,37 +1,52 @@
 package com.storres.box_school.service;
 
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
+import java.util.Locale;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import com.storres.box_school.config.AppProperties;
 import com.storres.box_school.model.dto.RegistrationCodeResponse;
 import com.storres.box_school.model.entity.Student;
 
-import lombok.RequiredArgsConstructor;
-
 /**
- * Codigos de registro de un solo uso. Se generan con SecureRandom, se entregan una unica vez
- * y en la BD solo se guarda su hash SHA-256 (un volcado de la BD no permite activar cuentas).
- * Con ~50 bits de entropia + rate limit + expiracion, SHA-256 sin sal es suficiente.
+ * Codigos de registro de un solo uso. Se generan con SecureRandom, se entregan una unica vez y en la BD
+ * solo se guarda su HMAC-SHA256 con una "pimienta" derivada del secreto de la aplicacion (jwt.secret):
+ * un volcado de la base de datos por si solo NO permite probar candidatos offline (con ~49 bits de entropia
+ * un SHA-256 sin clave se agotaba en horas con GPU; auditoria Fase 0, B-14). Ademas hay rate limit,
+ * expiracion y un solo uso.
+ *
+ * Nota operativa: rotar jwt.secret invalida los codigos pendientes (basta regenerarlos).
  */
 @Service
-@RequiredArgsConstructor
 public class RegistrationCodeService {
 
     // Sin caracteres ambiguos (0/O, 1/I/L)
     private static final String ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
     private static final int CODE_LENGTH = 10;
+    private static final String HMAC = "HmacSHA256";
 
     private final SecureRandom random = new SecureRandom();
     private final Clock clock;
     private final AppProperties props;
+    private final byte[] pepper;
+
+    public RegistrationCodeService(Clock clock, AppProperties props, @Value("${jwt.secret}") String secret) {
+        this.clock = clock;
+        this.props = props;
+        // Separacion de dominio: la clave del HMAC no es el secreto del JWT en bruto
+        this.pepper = sha256(("registration-code|" + secret).getBytes(StandardCharsets.UTF_8));
+    }
 
     /** Genera un codigo nuevo para el estudiante (invalida el anterior). El llamador debe persistir la entidad. */
     public RegistrationCodeResponse issueFor(Student student) {
@@ -55,7 +70,7 @@ public class RegistrationCodeService {
             return false;
         }
         byte[] expected = student.getRegistrationCodeHash().getBytes(StandardCharsets.UTF_8);
-        byte[] actual = hash(candidate.trim().toUpperCase()).getBytes(StandardCharsets.UTF_8);
+        byte[] actual = hash(candidate.trim().toUpperCase(Locale.ROOT)).getBytes(StandardCharsets.UTF_8);
         return MessageDigest.isEqual(expected, actual); // comparacion en tiempo constante
     }
 
@@ -64,11 +79,20 @@ public class RegistrationCodeService {
         student.setRegistrationCodeExpiresAt(null);
     }
 
-    private static String hash(String code) {
+    private String hash(String code) {
         try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            return HexFormat.of().formatHex(digest.digest(code.getBytes(StandardCharsets.UTF_8)));
-        } catch (NoSuchAlgorithmException e) {
+            Mac mac = Mac.getInstance(HMAC);
+            mac.init(new SecretKeySpec(pepper, HMAC));
+            return HexFormat.of().formatHex(mac.doFinal(code.getBytes(StandardCharsets.UTF_8)));
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException("HMAC-SHA256 no disponible", e);
+        }
+    }
+
+    private static byte[] sha256(byte[] input) {
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(input);
+        } catch (GeneralSecurityException e) {
             throw new IllegalStateException("SHA-256 no disponible", e);
         }
     }

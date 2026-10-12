@@ -27,11 +27,11 @@ Java 21 · Spring Boot 3.5 (Web, Data JPA, Security, Validation, Mail, Actuator)
 SPRING_PROFILES_ACTIVE=dev ./mvnw spring-boot:run
 ```
 
-Con el perfil `dev`, Swagger queda en `http://localhost:8080/swagger-ui.html`. Salud: `GET /actuator/health`.
+Con el perfil `dev`, Swagger queda en `http://localhost:8080/swagger-ui.html`. Sondas de salud públicas: `GET /actuator/health/liveness` y `/readiness` (el agregado `/actuator/health` exige autenticación). **En producción deja `SPRING_PROFILES_ACTIVE` vacío.**
 
 ### Si ya tenías una base creada con la versión anterior
 
-Flyway la adopta automáticamente (`baseline-version: 1`), aplica las migraciones V2–V5 (que además reparan restos que dejaba `ddl-auto=update`) y la app valida el esquema al arrancar. **Haz un respaldo antes** (`pg_dump`). Si existe el usuario `admin` / `admin123` que creaba el antiguo seeder, elimínalo o cambia su clave; los administradores nuevos se crean con `BOOTSTRAP_ADMIN_*` (solo si no existe ya ninguno).
+Arranca **una vez** con `FLYWAY_BASELINE_ON_MIGRATE=true` (apagado por defecto para no marcar baseline en una base equivocada): Flyway la toma como V1, aplica las migraciones V2–V6 (que además reparan restos que dejaba `ddl-auto=update`) y la app valida el esquema al arrancar. Después quita esa variable. **Haz un respaldo antes** (`pg_dump`) y revisa las consultas previas de `docs/DECISIONS.md` (D-012). Si existe el usuario `admin` / `admin123` que creaba el antiguo seeder, elimínalo o cambia su clave; los administradores nuevos se crean con `BOOTSTRAP_ADMIN_*` (solo si no existe ya ninguno).
 Las variables de correo cambiaron de nombre (`MAIL_HOST` → `SPRING_MAIL_HOST`, etc.) y `LICENSE_REMINDER_CRON` → `REMINDER_CRON`.
 
 ## Tests

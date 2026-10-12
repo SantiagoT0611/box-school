@@ -48,7 +48,7 @@ public class AdminBootstrap implements ApplicationRunner {
         }
 
         userRepository.save(User.builder()
-                .username(cfg.username().trim().toLowerCase())
+                .username(cfg.username().trim().toLowerCase(java.util.Locale.ROOT))
                 .password(passwordEncoder.encode(cfg.password()))
                 .role(Roles.ROLE_ADMIN)
                 .enabled(true)

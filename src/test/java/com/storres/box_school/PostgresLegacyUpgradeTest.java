@@ -35,6 +35,7 @@ import com.jayway.jsonpath.JsonPath;
  * Se omite automaticamente si no hay Docker.
  */
 @Testcontainers(disabledWithoutDocker = true)
+@HermeticTest
 @SpringBootTest
 @AutoConfigureMockMvc
 class PostgresLegacyUpgradeTest {
@@ -55,7 +56,7 @@ class PostgresLegacyUpgradeTest {
     void legacySchemaIsRepairedByTheMigrations() {
         List<String> history = jdbc.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class);
-        assertThat(history).containsExactly("1", "2", "3", "4", "5");
+        assertThat(history).containsExactly("1", "2", "3", "4", "5", "6");
 
         List<String> paymentFks = jdbc.queryForList("""
                 select confrelid::regclass::text from pg_constraint
@@ -131,6 +132,97 @@ class PostgresLegacyUpgradeTest {
         for (int i = 0; i < periods.size() - 1; i++) {
             assertThat(periods.get(i).get("period_end")).isEqualTo(periods.get(i + 1).get("period_start"));
         }
+    }
+
+    @Test
+    void doubleSubmitOfCreatePriceNeverLeavesTwoActivePricesOfTheSameType() throws Exception {
+        // A-2 (auditoria Fase 0): antes quedaban 2 activos y TODOS los pagos de ese tipo daban 500
+        jdbc.update("update users set password = ? where username = 'salito'", encoder.encode(PASSWORD));
+        String admin = login("salito", PASSWORD);
+
+        for (int round = 0; round < 3; round++) { // varias rondas: la carrera no es determinista
+            int parallel = 6;
+            List<Integer> statuses = Collections.synchronizedList(new ArrayList<>());
+            List<Thread> threads = new ArrayList<>();
+            final int amount = 10_000 + round;
+            for (int i = 0; i < parallel; i++) {
+                Thread t = new Thread(() -> {
+                    try {
+                        statuses.add(postJson("/api/prices", admin,
+                                Map.of("type", "BIWEEKLY", "amount", amount, "durationDays", 15))
+                                .andReturn().getResponse().getStatus());
+                    } catch (Exception e) {
+                        statuses.add(-1);
+                    }
+                });
+                threads.add(t);
+                t.start();
+            }
+            for (Thread t : threads) {
+                t.join();
+            }
+
+            assertThat(statuses).as("ronda %d: solo 201 (creado) o 409 (perdio la carrera), nunca 500", round)
+                    .allMatch(code -> code == 201 || code == 409).contains(201);
+            Integer active = jdbc.queryForObject(
+                    "select count(*) from prices where type = 'BIWEEKLY' and active = true", Integer.class);
+            assertThat(active).as("ronda %d: exactamente un precio activo por tipo", round).isEqualTo(1);
+            // y la API sigue sana: el precio vigente se puede consultar (antes: 500)
+            mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                            .get("/api/prices/active/BIWEEKLY").header("Authorization", "Bearer " + admin))
+                    .andExpect(status().isOk());
+        }
+    }
+
+    @Test
+    void profileEditsAndPaymentsRunningTogetherNeverLoseAPaymentExtension() throws Exception {
+        // M-1 (auditoria Fase 0): editar el perfil leia sin bloqueo y reescribia expiration_date con el valor viejo
+        jdbc.update("update users set password = ? where username = 'salito'", encoder.encode(PASSWORD));
+        String admin = login("salito", PASSWORD);
+        postJson("/api/prices", admin, Map.of("type", "MONTHLY", "amount", 80000, "durationDays", 30));
+        String created = postJson("/api/students", admin, Map.of("firstName", "Edita", "lastName", "Mientras",
+                "email", "edita@legacy.test", "phone", "3001234567"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long studentId = ((Number) JsonPath.read(created, "$.id")).longValue();
+        LocalDate before = LocalDate.parse(JsonPath.read(created, "$.expirationDate"));
+
+        int payments = 6;
+        List<Integer> payStatuses = Collections.synchronizedList(new ArrayList<>());
+        List<Integer> editStatuses = Collections.synchronizedList(new ArrayList<>());
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < payments; i++) {
+            final int n = i;
+            threads.add(new Thread(() -> {
+                try {
+                    payStatuses.add(postJson("/api/payments/students/" + studentId, admin, Map.of("type", "MONTHLY"))
+                            .andReturn().getResponse().getStatus());
+                } catch (Exception e) {
+                    payStatuses.add(-1);
+                }
+            }));
+            threads.add(new Thread(() -> {
+                try {
+                    editStatuses.add(mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                                    .put("/api/students/" + studentId).contentType(MediaType.APPLICATION_JSON)
+                                    .header("Authorization", "Bearer " + admin)
+                                    .content(json.writeValueAsString(Map.of("firstName", "Edita" + n, "lastName", "Mientras",
+                                            "email", "edita@legacy.test", "phone", "300123456" + n))))
+                            .andReturn().getResponse().getStatus());
+                } catch (Exception e) {
+                    editStatuses.add(-1);
+                }
+            }));
+        }
+        threads.forEach(Thread::start);
+        for (Thread t : threads) {
+            t.join();
+        }
+
+        assertThat(payStatuses).containsOnly(201);
+        assertThat(editStatuses).containsOnly(200);
+        LocalDate after = jdbc.queryForObject("select expiration_date from students where id = ?", LocalDate.class, studentId);
+        assertThat(after).as("ninguna edicion de perfil debe revertir la extension de un pago")
+                .isEqualTo(before.plusDays(30L * payments));
     }
 
     // ------------------------------------------------------------------ helpers

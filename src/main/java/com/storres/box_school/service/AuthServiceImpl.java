@@ -98,6 +98,6 @@ public class AuthServiceImpl implements AuthService {
     }
 
     private static String normalizeUsername(String username) {
-        return username.trim().toLowerCase();
+        return username.trim().toLowerCase(java.util.Locale.ROOT);
     }
 }

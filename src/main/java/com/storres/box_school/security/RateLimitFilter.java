@@ -6,6 +6,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -30,6 +32,7 @@ import jakarta.servlet.http.HttpServletResponse;
  */
 public class RateLimitFilter extends OncePerRequestFilter {
 
+    private static final Logger log = LoggerFactory.getLogger(RateLimitFilter.class);
     private static final long WINDOW_MS = 60_000L;
 
     private final int maxPerWindow;
@@ -43,7 +46,22 @@ public class RateLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return maxPerWindow <= 0 || !request.getRequestURI().startsWith("/api/auth/");
+        return maxPerWindow <= 0 || !isAuthPath(request);
+    }
+
+    /**
+     * Se decide por la ruta DECODIFICADA y normalizada (servletPath + pathInfo), la misma que usan
+     * Spring MVC y Spring Security. getRequestURI() NO esta decodificado: "/api/%61uth/login" llega al
+     * mismo controlador pero no empezaria por "/api/auth/" (auditoria Fase 0, A-1).
+     */
+    static boolean isAuthPath(HttpServletRequest request) {
+        String servletPath = request.getServletPath() == null ? "" : request.getServletPath();
+        String pathInfo = request.getPathInfo() == null ? "" : request.getPathInfo();
+        String path = servletPath + pathInfo;
+        if (path.isEmpty()) {
+            path = request.getRequestURI(); // contenedores sin servletPath (p. ej. pruebas)
+        }
+        return path.startsWith("/api/auth/") || path.equals("/api/auth");
     }
 
     @Override
@@ -56,6 +74,9 @@ public class RateLimitFilter extends OncePerRequestFilter {
                 current == null || now - current.startedAt >= WINDOW_MS ? new Window(now) : current);
 
         if (window.count.incrementAndGet() > maxPerWindow) {
+            if (window.count.get() == maxPerWindow + 1) { // una sola traza por ventana: sin inundar el log
+                log.warn("Rate limit superado: ip={} ruta={}", request.getRemoteAddr(), request.getServletPath());
+            }
             response.setStatus(HttpStatus.TOO_MANY_REQUESTS.value());
             response.setHeader("Retry-After", "60");
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
