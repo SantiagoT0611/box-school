@@ -100,6 +100,10 @@ app:
     code-validity-hours: ${REGISTRATION_CODE_HOURS:72}
   rate-limit:
     auth-requests-per-minute: ${AUTH_RATE_LIMIT_PER_MINUTE:10}
+  password-reset:
+    token-validity-minutes: ${PASSWORD_RESET_MINUTES:30}
+    resend-cooldown-seconds: ${PASSWORD_RESET_COOLDOWN_SECONDS:60}
+    url: ${PASSWORD_RESET_URL:http://localhost:4200/reset-password}   # pagina del frontend; en produccion, la real
   bootstrap-admin:
     username: ${BOOTSTRAP_ADMIN_USERNAME:}
     password: ${BOOTSTRAP_ADMIN_PASSWORD:}

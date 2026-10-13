@@ -21,6 +21,8 @@ import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import com.storres.box_school.exception.EmailAlreadyExistsException;
+import com.storres.box_school.exception.InvalidPasswordChangeException;
+import com.storres.box_school.exception.InvalidPasswordResetException;
 import com.storres.box_school.exception.InvalidRegistrationException;
 import com.storres.box_school.exception.PriceActiveNotFoundException;
 import com.storres.box_school.exception.StudentNotActiveException;
@@ -94,7 +96,8 @@ public class GlobalExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     @ExceptionHandler({ PriceActiveNotFoundException.class, StudentNotActiveException.class,
-            InvalidRegistrationException.class })
+            InvalidRegistrationException.class, InvalidPasswordResetException.class,
+            InvalidPasswordChangeException.class })
     public ResponseEntity<ApiErrorResponse> handleBusinessRule(RuntimeException ex) {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage());
     }

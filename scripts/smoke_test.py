@@ -13,7 +13,7 @@ Variables de entorno:
   EXPECT_SWAGGER     "true" si la instancia corre con perfil dev / SWAGGER_ENABLED=true (default false:
                      entonces Swagger DEBE responder 404)
 
-El script llama ~8 veces a /api/auth/*: arranca la instancia de prueba con AUTH_RATE_LIMIT_PER_MINUTE=1000
+El script llama ~16 veces a /api/auth/*: arranca la instancia de prueba con AUTH_RATE_LIMIT_PER_MINUTE=1000
 para poder repetirlo sin tropezar con el limite (429).
 
 Uso:  ADMIN_USERNAME=... ADMIN_PASSWORD=... BASE_URL=http://localhost:8081 python scripts/smoke_test.py
@@ -117,6 +117,30 @@ def main():
                 {"username": username + "x", "password": "ClaveSegura123", "email": email, "registrationCode": code})
     check("el codigo no se reutiliza -> 400", s == 400)
 
+    # --- recuperar y cambiar contrasena (D-024)
+    s1, b1 = call("POST", "/api/auth/forgot-password", {"email": email})
+    s2, b2 = call("POST", "/api/auth/forgot-password", {"email": f"no-existe-{stamp}@example.test"})
+    check("forgot-password: 202 identico exista o no el email", s1 == 202 and s2 == 202 and b1 == b2, str(b1))
+    s, _ = call("POST", "/api/auth/reset-password", {"token": "A" * 43, "newPassword": "NuevaClave12345"})
+    check("reset-password con token adivinado -> 400", s == 400)
+    s, _ = call("POST", "/api/auth/change-password",
+                {"currentPassword": "ClaveSegura123", "newPassword": "NuevaClave12345"})
+    check("change-password sin sesion -> 401", s == 401)
+    s, _ = call("POST", "/api/auth/change-password",
+                {"currentPassword": "clave-mala-1", "newPassword": "NuevaClave12345"}, stu)
+    check("change-password con la clave actual incorrecta -> 400", s == 400)
+    s, b = call("POST", "/api/auth/change-password",
+                {"currentPassword": "ClaveSegura123", "newPassword": "NuevaClave12345"}, stu)
+    check("change-password correcto -> 200 con sesion nueva", s == 200 and bool(b.get("token")))
+    new_stu = b.get("token")
+    s, _ = call("GET", "/api/students/me", token=stu)
+    check("la sesion anterior al cambio de clave deja de servir -> 401", s == 401)
+    s, _ = call("GET", "/api/students/me", token=new_stu)
+    check("la sesion nueva si sirve", s == 200)
+    s, _ = call("POST", "/api/auth/login", {"username": username, "password": "ClaveSegura123"})
+    check("login con la clave anterior -> 401", s == 401)
+    stu = new_stu
+
     # --- permisos del estudiante
     s, b = call("GET", "/api/students/me", token=stu)
     check("GET /students/me", s == 200 and b["email"] == email)
@@ -178,8 +202,8 @@ def main():
     check("deactivate", s == 200 and b["status"] == "INACTIVE")
     s, _ = call("GET", "/api/students/me", token=stu)
     check("token del deshabilitado deja de servir -> 401", s == 401)
-    s, _ = call("POST", "/api/auth/login", {"username": username, "password": "ClaveSegura123"})
-    check("login del deshabilitado -> 401", s == 401)
+    s, _ = call("POST", "/api/auth/login", {"username": username, "password": "NuevaClave12345"})
+    check("login del deshabilitado (con su clave vigente) -> 401", s == 401)
 
     bad = [n for n, ok in results if not ok]
     print(f"\nRESUMEN: {len(results) - len(bad)} OK / {len(results)} | fallas: {bad}")

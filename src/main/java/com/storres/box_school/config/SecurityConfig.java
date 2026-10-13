@@ -58,7 +58,10 @@ public class SecurityConfig {
                         // 400 del firewall o un 404 se veian como un 401 enganoso (auditoria Fase 0, B-17).
                         // No expone nada: server.error.include-message/stacktrace = never.
                         .dispatcherTypeMatchers(jakarta.servlet.DispatcherType.ERROR).permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login", "/api/auth/register",
+                                "/api/auth/forgot-password", "/api/auth/reset-password").permitAll()
+                        // Cambiar la clave exige sesion (y la clave actual, ver AuthServiceImpl)
+                        .requestMatchers(HttpMethod.POST, "/api/auth/change-password").authenticated()
                         // Solo las sondas de vida/disponibilidad son publicas (no tocan SMTP ni datos).
                         // /actuator/health agregado exige autenticacion (auditoria Fase 0, A-3).
                         .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()

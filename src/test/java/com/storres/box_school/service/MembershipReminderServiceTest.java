@@ -56,7 +56,8 @@ class MembershipReminderServiceTest {
         var props = new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(""),
                 new AppProperties.MembershipReminder(true, 2, "0 0 8 * * *", delayMs),
                 new AppProperties.Registration(72), new AppProperties.RateLimit(10),
-                new AppProperties.BootstrapAdmin(null, null));
+                new AppProperties.BootstrapAdmin(null, null),
+                new AppProperties.PasswordReset(30, 60, "http://localhost:4200/reset-password"));
         return new MembershipReminderService(students, logs, mail, props, CLOCK, Runnable::run) {
             @Override
             void sleep(long millis) {
@@ -149,7 +150,8 @@ class MembershipReminderServiceTest {
         var props = new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(""),
                 new AppProperties.MembershipReminder(true, 2, "0 0 8 * * *", 0),
                 new AppProperties.Registration(72), new AppProperties.RateLimit(10),
-                new AppProperties.BootstrapAdmin(null, null));
+                new AppProperties.BootstrapAdmin(null, null),
+                new AppProperties.PasswordReset(30, 60, "http://localhost:4200/reset-password"));
         var deferred = new MembershipReminderService(students, logs, mail, props, CLOCK, queued::add);
         pending(student(1));
 
@@ -175,7 +177,8 @@ class MembershipReminderServiceTest {
                 new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(""),
                         new AppProperties.MembershipReminder(true, 2, "0 0 8 * * *", 50),
                         new AppProperties.Registration(72), new AppProperties.RateLimit(10),
-                        new AppProperties.BootstrapAdmin(null, null)), CLOCK, Runnable::run) {
+                        new AppProperties.BootstrapAdmin(null, null),
+                new AppProperties.PasswordReset(30, 60, "http://localhost:4200/reset-password")), CLOCK, Runnable::run) {
             @Override
             void sleep(long millis) {
                 Thread.currentThread().interrupt(); // simula un apagado durante la pausa

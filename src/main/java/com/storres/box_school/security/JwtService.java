@@ -21,6 +21,8 @@ import jakarta.annotation.PostConstruct;
 public class JwtService {
 
     private static final String ISSUER = "box-school";
+    /** Version de sesion del usuario (users.token_version) con la que se emitio el token. */
+    private static final String VERSION_CLAIM = "ver";
 
     @Value("${jwt.secret}")
     private String secretKey;
@@ -65,6 +67,7 @@ public class JwtService {
                 .issuer(ISSUER)
                 .subject(userDetails.getUsername())
                 .claim("roles", roles) // informativo para el frontend; la autorizacion real sale de la BD
+                .claim(VERSION_CLAIM, versionOf(userDetails)) // cambiar la clave invalida los tokens anteriores
                 .issuedAt(new Date(now))
                 .expiration(new Date(now + expirationMinutes * 60_000L))
                 .signWith(signKey, Jwts.SIG.HS256)
@@ -73,7 +76,20 @@ public class JwtService {
 
     public boolean isTokenValid(String token, UserDetails userDetails) {
         // extractAllClaims ya valida firma, algoritmo, issuer y expiracion
-        return extractUsername(token).equals(userDetails.getUsername());
+        Claims claims = extractAllClaims(token);
+        // La version debe coincidir con la vigente: cambiar/restablecer la clave deja sin efecto las sesiones
+        // anteriores. Un token emitido antes de existir el claim cuenta como version 0.
+        return userDetails.getUsername().equals(claims.getSubject())
+                && versionOf(claims) == versionOf(userDetails);
+    }
+
+    private static int versionOf(UserDetails userDetails) {
+        return userDetails instanceof AppUserDetails app ? app.getTokenVersion() : 0;
+    }
+
+    private static int versionOf(Claims claims) {
+        Number version = claims.get(VERSION_CLAIM, Number.class);
+        return version == null ? 0 : version.intValue();
     }
 
     private Claims extractAllClaims(String token) {

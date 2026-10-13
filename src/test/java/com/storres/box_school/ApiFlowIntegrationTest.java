@@ -283,7 +283,7 @@ class ApiFlowIntegrationTest {
         postJson("/api/auth/register", null, Map.of("username", "usuario1", "password", "ñ".repeat(72),
                 "email", "alguien@test.com", "registrationCode", "ABCDEFGHJK"))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.errors.passwordWithinBcryptLimit").exists());
+                .andExpect(jsonPath("$.errors.password").exists());
     }
 
     @Test

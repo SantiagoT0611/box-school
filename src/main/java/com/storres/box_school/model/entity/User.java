@@ -20,6 +20,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+/**
+ * @DynamicUpdate: solo se escriben las columnas modificadas. Sin esto, deshabilitar la cuenta (que lee el usuario y
+ * confirma despues) reescribia password y token_version con los valores leidos al inicio y deshacia un cambio de
+ * contrasena confirmado entre medio (Fase 1; mismo motivo que en Student, N-2).
+ */
+@org.hibernate.annotations.DynamicUpdate
 @Getter
 @Setter
 @Entity
@@ -44,6 +50,11 @@ public class User {
     @Builder.Default
     @Column(nullable = false)
     private Boolean enabled = true;
+
+    /** Sube con cada cambio de clave; el JWT lleva la version con la que se emitio (ver JwtService). */
+    @Builder.Default
+    @Column(name = "token_version", nullable = false)
+    private Integer tokenVersion = 0;
 
     @OneToOne(fetch = FetchType.LAZY)
     // Nullable: las cuentas ADMIN no corresponden a un estudiante

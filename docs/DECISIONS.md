@@ -26,9 +26,9 @@ Dueño: Santiago Torres (proyecto personal / práctica profesional). Idioma: men
 | Stack | Java 21, Spring Boot 3.5, Spring Security 6, Spring Data JPA, PostgreSQL, Flyway, JJWT 0.13, springdoc, Lombok, Maven (`./mvnw`) |
 | Capas | `controller` → `service` (interfaz + `Impl`) → `repository`; `mapper` a mano; DTOs en `model/dto`; excepciones en `exception`; manejo global en `config/GlobalExceptionHandler` |
 | Auth | JWT stateless (HS256, 120 min por defecto), roles `ROLE_ADMIN` / `ROLE_USER` |
-| Esquema | Flyway en `src/main/resources/db/migration` (V1 inicial, V2 códigos de registro + notificaciones + índices). `ddl-auto=validate` |
+| Esquema | Flyway en `src/main/resources/db/migration` (V1 inicial … V7 recuperación de contraseña; ver D-012 y D-024). `ddl-auto=validate` |
 | Config | `application.yml` versionado **sin secretos** (solo `${VARIABLES}`); plantilla en `.env.example`; perfil `dev` en `application-dev.yml` |
-| Tests | `./mvnw test` → H2 en modo PostgreSQL + las mismas migraciones; 26 tests (flujo API completo, recordatorios, JWT, códigos, bootstrap) |
+| Tests | `./mvnw test` → H2 en modo PostgreSQL + las mismas migraciones; 106 tests (flujo API, recordatorios, JWT, códigos, bootstrap, PostgreSQL real, recuperación de contraseña) |
 | Observabilidad | `/actuator/health` (público, con probes); logs SLF4J sin PII sensible |
 
 ### Contrato de API vigente (lo que consumirá el frontend)
@@ -39,6 +39,9 @@ Errores siempre: `{ timestamp, code, message, errors? }`. Listados: `Page` de Sp
 |---|---|---|
 | `POST /api/auth/login` | público (rate limit) | → `{token, username, roles}` |
 | `POST /api/auth/register` | público (rate limit) | body: `username, password, email, registrationCode` → 201 + token |
+| `POST /api/auth/forgot-password` | público (rate limit) | body: `email` → **siempre 202** `{message}` (no revela si existe; enfriamiento 60 s por cuenta). Ver D-024 |
+| `POST /api/auth/reset-password` | público (rate limit) | body: `token, newPassword` → 200 `{message}`; token inválido/expirado/usado → 400 genérico. No devuelve sesión |
+| `POST /api/auth/change-password` | autenticado | body: `currentPassword, newPassword` → 200 `{token, username, roles}` (sesión nueva; las anteriores dejan de valer). Clave actual mal → 400 |
 | `GET /api/students/me` | autenticado | perfil + `daysUntilExpiration`, `membershipExpired` |
 | `GET /api/payments/me` | autenticado | historial propio |
 | `GET /api/prices/active`, `/active/{type}` | autenticado | precios vigentes (`BIWEEKLY`, `MONTHLY`) |
@@ -126,6 +129,17 @@ El dueño enviará **mockups** y de ahí saldrán las decisiones de tipografía,
 ### D-022 · Endpoints públicos mínimos y errores sin autenticación — *Vigente*
 Solo `GET /actuator/health/liveness` y `/readiness` son públicos (no tocan SMTP ni datos); el agregado `/actuator/health` exige autenticación y `management.health.mail.enabled=false` (el indicador abría una conexión SMTP por consulta anónima: amplificación y falsas alarmas). El despacho `ERROR` (`/error`) se permite sin autenticar para que 400/404/500 se vean como tales (no como un 401 engañoso); no filtra nada porque `server.error.include-message/stacktrace=never`. `/actuator/**` (incluido el índice y el health agregado) es solo ADMIN salvo las dos sondas. Un fallo de acceso a datos al validar el JWT responde **503**, no 401 (una caída de la BD no debe cerrar la sesión de todos).
 
+### D-024 · Recuperación y cambio de contraseña — *Vigente (Fase 1)*
+**Flujo.** `POST /api/auth/forgot-password {email}` responde **siempre 202 con el mismo cuerpo**, exista o no la cuenta. El trabajo corre en segundo plano (`@Async`): así el *tiempo* de respuesta tampoco delata si el email tiene cuenta (la diferencia sería una escritura en BD + el correo). Solo se emite token para cuentas de **estudiante habilitadas** con estudiante `ACTIVE`; los admins no tienen email (ver O-11). Entre dos correos de la misma cuenta hay un **enfriamiento** de 60 s (`PASSWORD_RESET_COOLDOWN_SECONDS`) para que nadie bombardee a un estudiante con correos (además del rate limit por IP, D-011). El correo lleva `PASSWORD_RESET_URL?token=…`; la base del enlace sale **siempre de la configuración**, nunca del request (sin *Host header injection*). `POST /api/auth/reset-password {token, newPassword}` → 200 y **no inicia sesión** (el usuario entra con la clave nueva); cualquier fallo —token desconocido, expirado, usado o cuenta deshabilitada— devuelve el **mismo 400**. `POST /api/auth/change-password {currentPassword, newPassword}` (autenticado) → 200 con una **sesión nueva**; clave actual incorrecta es **400, no 401**, para que el cliente no lo confunda con sesión vencida y la cierre. En ambos casos se avisa por correo (sin la clave) de que fue cambiada.
+
+**Token.** 32 bytes de `SecureRandom` en Base64 URL-safe (43 caracteres, 256 bits). En la BD solo su **SHA-256**: con esa entropía no se puede probar por fuerza bruta aunque se filtre la tabla, así que no hace falta pimienta (a diferencia del código de registro de 10 caracteres, D-023) y rotar `jwt.secret` no invalida los enlaces pendientes. Vida de 30 min (`PASSWORD_RESET_MINUTES`, validada al arrancar entre 1 y 1440). **Un solo uso y atómico**: `UPDATE … SET used_at = :now WHERE token_hash = :h AND used_at IS NULL AND expires_at > :now` (una sola sentencia; de N solicitudes simultáneas pasa exactamente una, probado en PostgreSQL real). **A lo sumo un token por usuario** (`UNIQUE(user_id)`; pedir otro invalida el anterior), así la tabla nunca crece más que el número de usuarios y no hace falta un job de limpieza. `PasswordResetService.IssuedToken.toString()` no incluye el token ni el email: no llega a un log ni por accidente (hay un test que recorre todos los logs en DEBUG).
+
+**Cierre de sesiones.** Columna `users.token_version` (V7) + claim `ver` en el JWT; el token vale solo si su versión es la vigente. El plan inicial decía `password_changed_at` + `iat`: `iat` tiene resolución de segundos (un token emitido en el mismo segundo del cambio sobreviviría o el nuevo se rechazaría) y depende de relojes; el contador es exacto y no cuesta una consulta extra (el filtro ya recarga el usuario en cada request, D-002). Los tokens anteriores a la Fase 1 no traen `ver` y cuentan como versión 0: siguen valiendo hasta el primer cambio de clave de su dueño.
+
+**Concurrencia.** El cambio de clave es un `UPDATE users SET password = …, token_version = token_version + 1 WHERE id = … AND enabled = true`: no pisa otras columnas, no reactiva una cuenta deshabilitada y, si la deshabilitaron entre medio, no cambia nada (rollback y el token queda como estaba). `User` pasó a `@DynamicUpdate` (misma causa que N-2 en `Student`): sin eso, deshabilitar la cuenta reescribía `password` y `token_version` con los valores leídos al inicio y **deshacía** un cambio confirmado entre medio. Regla de clave única `@ValidPassword` (8–72 caracteres y ≤ 72 bytes UTF-8) usada por registro, restablecimiento y cambio.
+
+**Aceptado y registrado.** No hay bloqueo temporal por cuenta tras N fallos (solo límite por IP) ni lista de claves comunes; el enlace viaja en claro por SMTP (inherente al correo); el correo es «dispara y olvida» (D-008). **Para el frontend (Fase 5):** la página de restablecimiento debe leer el token de la URL, enviarlo por POST y **limpiar la URL** (`history.replaceState`) y usar `Referrer-Policy: no-referrer`, para que no quede en historial ni se filtre por `Referer`.
+
 ### D-023 · Límites de entrada — *Vigente*
 Cuerpo máximo de **64 KB** en `/api/**` (413 con `Content-Length`; lectura cortada si es chunked). El filtro es de servlet con `HIGHEST_PRECEDENCE` y `spring.mvc.formcontent.filter.enabled=false` (la API es solo JSON): sin eso `OrderedFormContentFilter` copiaba a memoria el cuerpo completo de cualquier `PUT/PATCH/DELETE` de formulario, anónimo y antes de la cadena de seguridad (OOM; re-auditoría N-1). y strings JSON de máximo 100 000 caracteres (Jackson). Precios: duración ≤ 366 días, monto ≤ 8 enteros y 2 decimales. Contraseña ≤ 72 **bytes** (BCrypt). El token JWT debe traer `exp` e `iss`. Los códigos de registro se guardan con HMAC-SHA256 y una pimienta derivada de `jwt.secret`: un volcado de la BD no permite probar candidatos offline; rotar `jwt.secret` —o actualizar desde la versión que usaba SHA-256 sin clave— invalida los códigos pendientes (basta regenerarlos).
 
@@ -137,12 +151,13 @@ Cuerpo máximo de **64 KB** en `/api/**` (413 con `Content-Length`; lectura cort
 | O-2 | Refresh token / duración de sesión | Hoy 120 min sin refresh. Propuesta: refresh opaco rotativo en BD cuando el frontend lo pida (ROADMAP Fase 3). |
 | O-3 | Facturación | La entidad `Invoice` y su tabla existen pero no se usan. Definir si hay factura por pago (¿electrónica DIAN?) o se elimina (ROADMAP Fase 3). |
 | O-4 | Zona horaria del negocio | **Resuelta:** `America/Bogota`, fijada como `APP_TIMEZONE` (2026-10-08). |
-| O-5 | Recuperar contraseña | **No existe.** Es la **siguiente tarea** tras verificar en PostgreSQL (ROADMAP Fase 1): `forgot-password` (token de un solo uso por correo, hash en BD, expira 30 min) + `reset-password` + `change-password`, invalidando JWT anteriores. |
+| O-5 | Recuperar contraseña | **Resuelta (Fase 1, D-024):** `forgot-password` + `reset-password` + `change-password`, token de un solo uso con hash en BD, sesiones anteriores invalidadas. Pendiente del dueño: definir `PASSWORD_RESET_URL` (la página real del frontend) y un SMTP real antes de producción. |
 | O-6 | Varias instancias | Rate limit a Redis (D-011); opcional ShedLock para el scheduler (D-008). |
 | O-7 | Tests contra PostgreSQL real | **Resuelta (2026-10-08):** Testcontainers con `PostgresLegacyUpgradeTest`. Pendiente solo decidir si CI (Fase 4) ejecutará esos tests (requiere Docker en el runner; GitHub Actions lo trae). |
 | O-8 | CI/CD y despliegue | GitHub Actions con `./mvnw verify`; Dockerfile + compose (README lo lista como futuro). |
 | O-9 | Auditoría de acciones admin | Quién desactivó/cobró/cambió precio y cuándo (tabla `audit_log`). |
-| O-10 | Cambio de contraseña / editar perfil propio, y que el admin cree otros admins | Sin definir. |
+| O-10 | Editar perfil propio y que el admin cree otros admins | Cambio de contraseña: **hecho** (D-024). Falta editar el perfil propio y crear otros admins (ROADMAP Fase 3). |
+| O-11 | Recuperar la cuenta de un **administrador** | Las cuentas ADMIN no tienen email, así que `forgot-password` no aplica. Hoy un admin cambia su clave con `change-password` (si la recuerda) y, si la perdió, hay que restablecerla en la BD. Propuesta: al existir «crear admins» (Fase 3) otro admin puede restablecérsela; o dar email a `users`. |
 
 ## 5. Deuda técnica conocida
 
@@ -151,12 +166,14 @@ Cuerpo máximo de **64 KB** en `/api/**` (413 con `Content-Length`; lectura cort
 - Búsquedas `LIKE '%texto%'` no usan índice; si la escuela supera miles de alumnos, evaluar `pg_trgm`.
 - Mails en texto plano simple; plantillas HTML cuando haya diseño.
 - Sin i18n de mensajes (todo español fijo).
+- Sin bloqueo temporal por cuenta tras N intentos fallidos (login o cambio de clave): solo límite por IP (D-011). Sin lista de claves comunes (D-024).
 - La BD local de desarrollo puede contener el usuario `admin` / `admin123` creado por el antiguo `DataSeeder`: **eliminarlo o cambiar su clave** y crear el admin con `BOOTSTRAP_ADMIN_*`.
 
 ## 6. Historial
 
 | Fecha | Cambio |
 |---|---|
+| 2026-10-13 | **Fase 1 implementada** (recuperar y cambiar contraseña, D-024): V7 (`password_reset_tokens`, `users.token_version`), `forgot/reset/change-password`, JWT con versión de sesión, `User` con `@DynamicUpdate`, `@ValidPassword` única. **106 tests** (+25: 15 de ataque sobre H2, concurrencia y carrera con desactivación en PostgreSQL real, JWT, configuración) y 13 mutaciones verificadas (todas detectadas). Pendiente: auditoría independiente de la fase para cerrarla. |
 | 2026-10-12 | **Fase 0 CERRADA.** Verificación final del auditor independiente sobre `280ece7`: 0 críticos, 0 altos, N-1..N-4 cerrados con evidencia reproducida, 10/10 mutaciones antes no detectadas ahora fallan, 77/77 con Docker obligatorio ([audits/FASE-0-verificacion-final.md](audits/FASE-0-verificacion-final.md)). Dejó 3 bajos: NR-1 (`register` concurrente con `deactivate` dejaba la cuenta habilitada → `findByEmailForUpdate` + hash antes del bloqueo, test determinista verificado por mutación) y NR-3 (Guard también vigila `spring.flyway.url`) corregidos; NR-2 (413 sin cabeceras CORS) aceptado y anotado para la Fase 2. **81 tests, 0 omitidos.** Siguiente: Fase 1 (recuperar contraseña, `V7`). |
 | 2026-10-12 | **Re-auditoría independiente de la Fase 0** (commit `d3157e8`): A-1/A-2/A-3 confirmados cerrados; abrió N-1 (alto: límite de cuerpo evadible con `PUT` de formulario → OOM anónimo), N-2 (`register`/`regenerate` pisaban pagos), N-3 (hermetismo sin datasource), N-4 (12 correcciones sin test). Corregidos todos (+ R-3..R-12, ver ROADMAP) con 16 tests nuevos y 8 mutaciones verificadas: **77 tests, 0 omitidos**. D-009: `APP_TIMEZONE` en blanco = `America/Bogota`. Informe: [audits/FASE-0-reauditoria.md](audits/FASE-0-reauditoria.md). Pendiente: verificación final del auditor para cerrar la fase. |
 | 2026-10-11 | **Correcciones de la auditoría de la Fase 0** (puerta aún pendiente de re-auditoría): A-1 rate limit por ruta decodificada; A-2 V6 precio activo único (D-021); A-3 solo sondas públicas (D-022); M-1 bloqueo de fila al editar/activar; M-3 cotas de precio; M-4 recordatorios 202 + candado; M-7 503 ante caída de BD; M-8 límite de cuerpo (D-023); M-9 tests herméticos (D-015); M-11 `.env.example`, `APP_TIMEZONE` por defecto `America/Bogota`, `baseline-on-migrate` apagado; B-2, B-3, B-4, B-5, B-6, B-11 (`User.student` LAZY), B-12 (`Locale.ROOT`), B-13, B-14 (HMAC). Excepciones registradas: M-5/M-6 (D-012). Aplazados: M-2 (idempotencia de pagos → Fase 2 con `reference` UNIQUE). Numeración futura: recuperar contraseña = V7, pagos = V8. |

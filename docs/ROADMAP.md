@@ -99,16 +99,19 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 - [x] **Verificación final del auditor (2026-10-12) → [audits/FASE-0-verificacion-final.md](audits/FASE-0-verificacion-final.md): ✅ APROBADA.** N-1..N-4 cerrados con evidencia, 10/10 mutaciones antes no detectadas ahora fallan, 77/77 con Docker obligatorio. Dejó 3 bajos: **NR-1** (`register` vs `deactivate` dejaba la cuenta habilitada) y **NR-3** (Guard sin vigilar Flyway) corregidos con test (NR-1 determinista y verificado por mutación); **NR-2** (413 sin cabeceras CORS) aceptado → se atiende en la Fase 2 con la excepción de tamaño por ruta para imágenes.
 - **Estado final:** 81 tests, 0 omitidos (`REQUIRE_DOCKER=true`). **Fase 0 cerrada.** Siguiente: Fase 1.
 
-### ⬜ Fase 1 — Recuperar y cambiar contraseña (O-5) *(siguiente)*
+### 🟦 Fase 1 — Recuperar y cambiar contraseña (O-5) *(implementada; falta la auditoría independiente)*
 **Objetivo:** que un estudiante que olvidó su clave pueda recuperarla sin intervención del admin, sin abrir huecos de seguridad.
 
-- [ ] Migración `V7`: tabla `password_reset_tokens` (hash SHA-256, expira a los 30 min, uso único) y columna `users.password_changed_at`.
-- [ ] `POST /api/auth/forgot-password`: siempre responde **202 genérico** (no revela si el email existe), con rate limit, envía correo.
-- [ ] `POST /api/auth/reset-password` (token + nueva clave).
-- [ ] `POST /api/auth/change-password` (autenticado; pide la clave actual).
-- [ ] Al cambiar la clave, los JWT emitidos antes dejan de valer (`iat` vs `password_changed_at` en `JwtAuthenticationFilter`).
+- [x] Migración `V7`: tabla `password_reset_tokens` (hash SHA-256, expira a los 30 min, uso único, a lo sumo uno por usuario) y columna `users.token_version` (en vez de `password_changed_at`: contador exacto en lugar de `iat` de resolución de segundos; ver D-024).
+- [x] `POST /api/auth/forgot-password`: siempre responde **202 genérico** (no revela si el email existe; trabajo en segundo plano para que el tiempo tampoco lo delate), con rate limit y enfriamiento por cuenta, envía correo.
+- [x] `POST /api/auth/reset-password` (token + nueva clave): consumo atómico, mismo 400 para todo fallo.
+- [x] `POST /api/auth/change-password` (autenticado; pide la clave actual; devuelve sesión nueva).
+- [x] Al cambiar la clave, los JWT emitidos antes dejan de valer (claim `ver` vs `users.token_version`).
 - **Reutilizar:** hash/uso único de `RegistrationCodeService`, `MailService.sendQuietly`, `RateLimitFilter`, plantilla de `ApiFlowIntegrationTest`.
 - **Tests de ataque:** token expirado · reutilizado · adivinado · email inexistente (misma respuesta y mismo tiempo aprox.) · token viejo tras cambiar la clave · fuerza bruta contra reset.
+
+- [x] 25 tests nuevos (106 en total, 0 omitidos): 15 de ataque (token adivinado/reutilizado/expirado/reemplazado, enumeración, tiempo, bombardeo, cuenta deshabilitada, sesiones anteriores, logs), 3 en PostgreSQL real (8 usos simultáneos del mismo token → pasa 1; reset vs. deshabilitar → cuenta intacta; restricciones V7), JWT, configuración y `@DynamicUpdate` de `User`. **13 mutaciones verificadas** (quitar `@Async`, `used_at IS NULL`, expiración, versión del JWT, enfriamiento, reemplazo del token, hash, `enabled = true`, bump de versión, clave actual, `@DynamicUpdate`, log del token, chequeo de cuenta activa): todas hacen fallar un test.
+- [ ] **Auditoría independiente de la fase** → `docs/audits/FASE-1-recuperar-contrasena.md` (0 críticos/altos para cerrar).
 
 **Puerta de calidad:** foco en enumeración de usuarios, timing, vida/entropía del token y que no se loguee ningún token.
 

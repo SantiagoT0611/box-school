@@ -41,7 +41,8 @@ class MailServiceTest {
         return new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(from),
                 new AppProperties.MembershipReminder(false, 2, "0 0 8 * * *", 0),
                 new AppProperties.Registration(72), new AppProperties.RateLimit(10),
-                new AppProperties.BootstrapAdmin(null, null));
+                new AppProperties.BootstrapAdmin(null, null),
+                new AppProperties.PasswordReset(30, 60, "http://localhost:4200/reset-password"));
     }
 
     @SuppressWarnings("unchecked")

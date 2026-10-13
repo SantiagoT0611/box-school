@@ -50,7 +50,9 @@ class PostgresLegacyUpgradeTest {
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate jdbc;
-    @Autowired PasswordEncoder encoder;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    PasswordEncoder encoder;
+    @Autowired com.storres.box_school.service.PasswordResetService resets;
     @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
     com.storres.box_school.service.RegistrationCodeService registrationCodes;
 
@@ -58,7 +60,7 @@ class PostgresLegacyUpgradeTest {
     void legacySchemaIsRepairedByTheMigrations() {
         List<String> history = jdbc.queryForList(
                 "select version from flyway_schema_history where success order by installed_rank", String.class);
-        assertThat(history).containsExactly("1", "2", "3", "4", "5", "6");
+        assertThat(history).containsExactly("1", "2", "3", "4", "5", "6", "7");
 
         List<String> paymentFks = jdbc.queryForList("""
                 select confrelid::regclass::text from pg_constraint
@@ -77,7 +79,9 @@ class PostgresLegacyUpgradeTest {
                 where table_name = 'payments' and column_name = 'amount'""", Integer.class);
         assertThat(legacyAmountColumn).as("la columna heredada payments.amount debe haberse eliminado").isZero();
 
-        List<String> usernames = jdbc.queryForList("select username from users order by id", String.class);
+        // los usuarios heredados (los demas tests de esta clase crean los suyos) quedaron en minusculas
+        List<String> usernames = jdbc.queryForList(
+                "select username from users where lower(username) in ('salito', 'sofi') order by id", String.class);
         assertThat(usernames).containsExactly("salito", "sofi");
     }
 
@@ -274,7 +278,113 @@ class PostgresLegacyUpgradeTest {
         assertThat(enabledAccounts).as("un estudiante INACTIVO no puede tener la cuenta habilitada").isZero();
     }
 
+    @Test
+    void v7CreatesTheRecoveryTableWithItsGuaranteesAndLegacyUsersStartAtVersionZero() {
+        List<String> definitions = jdbc.queryForList("""
+                select pg_get_constraintdef(oid) from pg_constraint
+                where conrelid = 'password_reset_tokens'::regclass and contype in ('u', 'f')""", String.class);
+        assertThat(definitions).contains("UNIQUE (token_hash)", "UNIQUE (user_id)",
+                "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE");
+
+        Integer notAtZero = jdbc.queryForObject(
+                "select count(*) from users where username in ('salito', 'sofi') and token_version <> 0", Integer.class);
+        assertThat(notAtZero).as("los usuarios heredados conservan sus sesiones: version 0").isZero();
+    }
+
+    @Test
+    void concurrentUsesOfTheSameResetTokenLetExactlyOneThrough() throws Exception {
+        long userId = registerStudent("carrera-token@legacy.test", "carreratoken");
+        String token = resets.issueFor("carrera-token@legacy.test").orElseThrow().token();
+
+        int parallel = 8;
+        List<Integer> statuses = Collections.synchronizedList(new ArrayList<>());
+        List<String> candidates = new ArrayList<>();
+        List<Thread> threads = new ArrayList<>();
+        for (int i = 0; i < parallel; i++) {
+            String candidate = "ClaveCandidata" + i + "XyZ";
+            candidates.add(candidate);
+            threads.add(new Thread(() -> {
+                try {
+                    statuses.add(postJson("/api/auth/reset-password", null,
+                            Map.of("token", token, "newPassword", candidate)).andReturn().getResponse().getStatus());
+                } catch (Exception e) {
+                    statuses.add(-1);
+                }
+            }));
+        }
+        threads.forEach(Thread::start);
+        for (Thread t : threads) {
+            t.join();
+        }
+
+        assertThat(statuses.stream().filter(code -> code == 200).count()).as("un solo uso").isEqualTo(1);
+        assertThat(statuses.stream().filter(code -> code == 400).count()).isEqualTo(parallel - 1);
+
+        String stored = jdbc.queryForObject("select password from users where id = ?", String.class, userId);
+        assertThat(candidates.stream().filter(c -> encoder.matches(c, stored)).count())
+                .as("la clave guardada es la de exactamente una solicitud").isEqualTo(1);
+        assertThat(jdbc.queryForObject("select token_version from users where id = ?", Integer.class, userId))
+                .as("la version sube una sola vez").isEqualTo(1);
+    }
+
+    @Test
+    void resetRacingWithDeactivateNeverChangesThePasswordOfADisabledAccount() throws Exception {
+        // Entrelazado DETERMINISTA: el restablecimiento ya consumio el token y esta calculando el hash de la clave
+        // nueva; en ese instante el admin deshabilita al estudiante. El cambio condicional (enabled = true) debe
+        // dejarlo todo como estaba: sin cambiar la clave ni reactivar la cuenta.
+        jdbc.update("update users set password = ? where username = 'salito'", encoder.encode(PASSWORD));
+        String admin = login("salito", PASSWORD);
+        long userId = registerStudent("carrera-desact@legacy.test", "carreradesact");
+        long studentId = jdbc.queryForObject("select student_id from users where id = ?", Long.class, userId);
+        String token = resets.issueFor("carrera-desact@legacy.test").orElseThrow().token();
+        String oldHash = jdbc.queryForObject("select password from users where id = ?", String.class, userId);
+
+        String newPassword = "ClaveDeLaCarrera789";
+        java.util.concurrent.CountDownLatch encoding = new java.util.concurrent.CountDownLatch(1);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            encoding.countDown();
+            Thread.sleep(1500); // ventana en la que se deshabilita la cuenta
+            return invocation.callRealMethod();
+        }).when(encoder).encode(org.mockito.ArgumentMatchers.eq(newPassword));
+
+        List<Integer> resetStatus = Collections.synchronizedList(new ArrayList<>());
+        Thread reset = new Thread(() -> {
+            try {
+                resetStatus.add(postJson("/api/auth/reset-password", null,
+                        Map.of("token", token, "newPassword", newPassword)).andReturn().getResponse().getStatus());
+            } catch (Exception e) {
+                resetStatus.add(-1);
+            }
+        });
+        reset.start();
+        assertThat(encoding.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .patch("/api/students/" + studentId + "/deactivate")
+                .header("Authorization", "Bearer " + admin)).andExpect(status().isOk());
+        reset.join();
+
+        var row = jdbc.queryForMap("select password, enabled, token_version from users where id = ?", userId);
+        assertThat(resetStatus).containsExactly(400);
+        assertThat(row.get("enabled")).isEqualTo(false);
+        assertThat(row.get("password")).as("la clave de una cuenta deshabilitada no cambia").isEqualTo(oldHash);
+        assertThat(((Number) row.get("token_version")).intValue()).isZero();
+    }
+
     // ------------------------------------------------------------------ helpers
+
+    /** Inscribe un estudiante con el admin heredado y le crea la cuenta. Devuelve el id del usuario. */
+    private long registerStudent(String email, String username) throws Exception {
+        jdbc.update("update users set password = ? where username = 'salito'", encoder.encode(PASSWORD));
+        String admin = login("salito", PASSWORD);
+        String created = postJson("/api/students", admin, Map.of("firstName", "Rec", "lastName", "Uperacion",
+                "email", email, "phone", "3001234567"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        postJson("/api/auth/register", null, Map.of("username", username, "password", "ClaveSegura123",
+                "email", email, "registrationCode", JsonPath.<String>read(created, "$.registrationCode")))
+                .andExpect(status().isCreated());
+        return jdbc.queryForObject("select id from users where username = ?", Long.class, username);
+    }
 
     private String login(String username, String password) throws Exception {
         String body = postJson("/api/auth/login", null, Map.of("username", username, "password", password))

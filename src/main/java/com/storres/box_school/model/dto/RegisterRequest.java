@@ -1,6 +1,7 @@
 package com.storres.box_school.model.dto;
 
-import jakarta.validation.constraints.AssertTrue;
+import com.storres.box_school.model.validation.ValidPassword;
+
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -27,17 +28,10 @@ public class RegisterRequest {
     @Pattern(regexp = "^[A-Za-z0-9._-]+$", message = "El usuario solo puede contener letras, numeros, punto, guion y guion bajo")
     private String username;
 
-    // BCrypt solo usa los primeros 72 bytes: se limita para que la clave completa cuente.
+    // Misma regla que al restablecer o cambiar la clave (BCrypt solo admite 72 bytes)
     @NotBlank(message = "La clave no puede estar vacia")
-    @Size(min = 8, max = 72, message = "La clave debe tener entre 8 y 72 caracteres")
+    @ValidPassword
     private String password;
-
-    /** BCrypt rechaza claves de mas de 72 BYTES; con tildes/emoji 72 caracteres pueden superarlos (daba 500). */
-    @com.fasterxml.jackson.annotation.JsonIgnore
-    @AssertTrue(message = "La clave no puede superar 72 bytes (usa menos caracteres especiales)")
-    public boolean isPasswordWithinBcryptLimit() {
-        return password == null || password.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 72;
-    }
 
     @NotBlank(message = "El email no puede estar vacio")
     @Email(message = "El email no tiene un formato valido")

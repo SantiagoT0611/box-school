@@ -37,7 +37,8 @@ class UnitTests {
         return new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(""),
                 new AppProperties.MembershipReminder(false, 2, "0 0 8 * * *", 0),
                 new AppProperties.Registration(72), new AppProperties.RateLimit(10),
-                new AppProperties.BootstrapAdmin(adminUser, adminPass));
+                new AppProperties.BootstrapAdmin(adminUser, adminPass),
+                new AppProperties.PasswordReset(30, 60, "http://localhost:4200/reset-password"));
     }
 
     @Nested
@@ -181,6 +182,40 @@ class UnitTests {
                     .expiration(new java.util.Date(System.currentTimeMillis() + 60_000)));
 
             assertThat(service.extractUsername(token)).isEqualTo("ana");
+        }
+
+        // ---- Fase 1: la version de sesion cierra las sesiones anteriores al cambiar la clave ----
+
+        private com.storres.box_school.security.AppUserDetails ana(int version) {
+            return new com.storres.box_school.security.AppUserDetails("ana", "x", true,
+                    List.of(new SimpleGrantedAuthority("ROLE_USER")), version);
+        }
+
+        @Test
+        void tokenIsValidOnlyWhileTheAccountKeepsTheVersionItWasIssuedWith() {
+            String token = service.generateToken(ana(0));
+
+            assertThat(service.isTokenValid(token, ana(0))).isTrue();
+            assertThat(service.isTokenValid(token, ana(1)))
+                    .as("tras cambiar la clave (version 1) el token anterior ya no vale").isFalse();
+            assertThat(service.isTokenValid(service.generateToken(ana(1)), ana(1))).isTrue();
+        }
+
+        @Test
+        void aTokenFromBeforeTheVersionClaimExistedCountsAsVersionZeroUntilThePasswordChanges() {
+            String legacy = tokenWith(b -> b.issuer("box-school")
+                    .expiration(new java.util.Date(System.currentTimeMillis() + 60_000)));
+
+            assertThat(service.isTokenValid(legacy, ana(0))).isTrue();
+            assertThat(service.isTokenValid(legacy, ana(1))).isFalse();
+        }
+
+        @Test
+        void aTokenIssuedForAnotherUserIsNotValidEvenWithTheSameVersion() {
+            var luis = new com.storres.box_school.security.AppUserDetails("luis", "x", true,
+                    List.of(new SimpleGrantedAuthority("ROLE_USER")), 0);
+
+            assertThat(service.isTokenValid(service.generateToken(luis), ana(0))).isFalse();
         }
     }
 

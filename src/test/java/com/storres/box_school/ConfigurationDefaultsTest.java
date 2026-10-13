@@ -1,6 +1,7 @@
 package com.storres.box_school;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.InputStream;
 import java.util.LinkedHashMap;
@@ -75,11 +76,37 @@ class ConfigurationDefaultsTest {
     }
 
     @Test
+    void passwordRecoveryDefaultsAreShortLivedAndRateLimited() throws Exception {
+        Map<String, String> c = productionConfig();
+
+        // D-024: el token es una credencial de un solo uso: vida corta y enfriamiento entre correos
+        assertThat(c.get("app.password-reset.token-validity-minutes")).isEqualTo("${PASSWORD_RESET_MINUTES:30}");
+        assertThat(c.get("app.password-reset.resend-cooldown-seconds")).isEqualTo("${PASSWORD_RESET_COOLDOWN_SECONDS:60}");
+        // el enlace sale de la configuracion, nunca del request
+        assertThat(c.get("app.password-reset.url")).startsWith("${PASSWORD_RESET_URL:http");
+    }
+
+    @Test
+    void passwordResetSettingsOutsideSaneBoundsAbortTheStartup() {
+        String url = "https://escuela.example/reset";
+
+        assertThatThrownBy(() -> new AppProperties.PasswordReset(0, 60, url)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AppProperties.PasswordReset(100_000, 60, url)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AppProperties.PasswordReset(30, -1, url)).isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AppProperties.PasswordReset(30, 60, "javascript:alert(1)"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new AppProperties.PasswordReset(30, 60, "/solo/ruta"))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThat(new AppProperties.PasswordReset(30, 0, url).url()).isEqualTo(url);
+    }
+
+    @Test
     void blankTimezoneMeansBusinessTimezoneNotTheServerOne() {
         var props = new AppProperties("", new AppProperties.Cors(java.util.List.of()), new AppProperties.Mail(""),
                 new AppProperties.MembershipReminder(false, 2, "0 0 8 * * *", 0),
                 new AppProperties.Registration(72), new AppProperties.RateLimit(10),
-                new AppProperties.BootstrapAdmin(null, null));
+                new AppProperties.BootstrapAdmin(null, null),
+                new AppProperties.PasswordReset(30, 60, "http://localhost:4200/reset-password"));
 
         assertThat(new AppConfig().clock(props).getZone().getId()).isEqualTo("America/Bogota");
     }
