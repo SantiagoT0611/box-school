@@ -28,9 +28,11 @@ public class NotificationController {
     @PreAuthorize("hasRole('ADMIN')")
     @PostMapping("/membership-reminders/run")
     public ResponseEntity<Map<String, String>> runMembershipReminders() {
-        if (reminderService.triggerAsync()) {
-            return ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("status", "started"));
-        }
-        return ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("status", "already-running"));
+        return switch (reminderService.triggerAsync()) {
+            case STARTED -> ResponseEntity.status(HttpStatus.ACCEPTED).body(Map.of("status", "started"));
+            case ALREADY_RUNNING -> ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("status", "already-running"));
+            case MAIL_NOT_CONFIGURED ->
+                ResponseEntity.status(HttpStatus.CONFLICT).body(Map.of("status", "mail-not-configured"));
+        };
     }
 }

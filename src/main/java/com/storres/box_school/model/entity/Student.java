@@ -19,6 +19,12 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 
+/**
+ * @DynamicUpdate: Hibernate escribe solo las columnas modificadas. Sin esto, cualquier operacion que lee al
+ * estudiante y confirma despues (activar cuenta, regenerar codigo...) reescribia expiration_date con el valor
+ * leido al inicio y pisaba un pago confirmado entre medio (auditoria Fase 0, N-2).
+ */
+@org.hibernate.annotations.DynamicUpdate
 @Getter
 @Setter
 @Entity

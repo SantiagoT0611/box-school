@@ -32,9 +32,13 @@ public class AppConfig {
                 StreamReadConstraints.builder().maxStringLength(100_000).build()));
     }
 
+    public static final String DEFAULT_TIMEZONE = "America/Bogota";
+
     @Bean
     public Clock clock(AppProperties props) {
         String tz = props.timezone();
-        return tz == null || tz.isBlank() ? Clock.systemDefaultZone() : Clock.system(ZoneId.of(tz));
+        // En blanco = la zona del NEGOCIO, no la del servidor: en la nube suele ser UTC y los vencimientos
+        // cambiarian de dia a las 19:00 hora de Colombia (auditoria Fase 0, R-8)
+        return Clock.system(ZoneId.of(tz == null || tz.isBlank() ? DEFAULT_TIMEZONE : tz));
     }
 }

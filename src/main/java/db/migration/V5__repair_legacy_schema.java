@@ -80,7 +80,7 @@ public class V5__repair_legacy_schema extends BaseJavaMigration {
                 String indexName = rs.getString("INDEX_NAME");
                 String columnName = rs.getString("COLUMN_NAME");
                 if (indexName != null && columnName != null && !rs.getBoolean("NON_UNIQUE")) {
-                    uniqueIndexes.computeIfAbsent(indexName, k -> new ArrayList<>()).add(columnName.toLowerCase());
+                    uniqueIndexes.computeIfAbsent(indexName, k -> new ArrayList<>()).add(columnName.toLowerCase(java.util.Locale.ROOT));
                 }
             }
         }
@@ -116,9 +116,9 @@ public class V5__repair_legacy_schema extends BaseJavaMigration {
     /** Los metadatos distinguen mayusculas segun la base: PostgreSQL guarda minusculas, otras mayusculas. */
     private static String ident(DatabaseMetaData meta, String name) throws SQLException {
         if (meta.storesUpperCaseIdentifiers()) {
-            return name.toUpperCase();
+            return name.toUpperCase(java.util.Locale.ROOT);
         }
-        return meta.storesLowerCaseIdentifiers() ? name.toLowerCase() : name;
+        return meta.storesLowerCaseIdentifiers() ? name.toLowerCase(java.util.Locale.ROOT) : name;
     }
 
     private static void execute(Connection c, String sql) throws SQLException {

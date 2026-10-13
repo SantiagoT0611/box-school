@@ -36,9 +36,7 @@ public class RequestSizeLimitFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        String path = request.getServletPath() == null || request.getServletPath().isEmpty()
-                ? request.getRequestURI() : request.getServletPath();
-        return !path.startsWith("/api/");
+        return !RateLimitFilter.requestPath(request).startsWith("/api/");
     }
 
     @Override

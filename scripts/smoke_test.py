@@ -169,8 +169,9 @@ def main():
 
     # --- recordatorios (no verifica el envio real de correo)
     s, b = call("POST", "/api/notifications/membership-reminders/run", token=adm)
-    check("recordatorios se disparan en segundo plano (202) o ya estan en curso (409)",
-          s in (202, 409) and isinstance(b, dict) and b.get("status") in ("started", "already-running"), str(b))
+    check("recordatorios: 202 started, o 409 already-running / mail-not-configured (sin correo)",
+          s in (202, 409) and isinstance(b, dict)
+          and b.get("status") in ("started", "already-running", "mail-not-configured"), str(b))
 
     # --- deshabilitar corta el acceso
     s, b = call("PATCH", f"/api/students/{sid}/deactivate", token=adm)

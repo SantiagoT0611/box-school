@@ -288,7 +288,13 @@ class ApiFlowIntegrationTest {
 
     @Test
     void reminderEndpointRespondsAcceptedImmediatelyAndRequiresAdmin() throws Exception {
-        // M-4: ya no retiene el hilo HTTP todo el lote; arranca en segundo plano y responde 202
+        // Sin correo configurado no se promete nada (R-4): estado explicito, no un 202 enganoso
+        mvc.perform(post("/api/notifications/membership-reminders/run").header("Authorization", bearer(adminToken)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.status").value("mail-not-configured"));
+
+        // M-4: con correo configurado ya no retiene el hilo HTTP todo el lote; arranca en segundo plano y responde 202
+        org.mockito.Mockito.when(mailService.isConfigured()).thenReturn(true);
         mvc.perform(post("/api/notifications/membership-reminders/run").header("Authorization", bearer(adminToken)))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.status").value("started"));

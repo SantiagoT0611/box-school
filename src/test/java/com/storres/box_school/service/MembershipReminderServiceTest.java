@@ -125,7 +125,7 @@ class MembershipReminderServiceTest {
     @Test
     void anotherRunWhileOneIsInProgressIsSkippedAndTheTriggerReportsIt() {
         AtomicReference<Integer> nestedRun = new AtomicReference<>();
-        AtomicReference<Boolean> nestedTrigger = new AtomicReference<>();
+        AtomicReference<MembershipReminderService.Trigger> nestedTrigger = new AtomicReference<>();
         pending(student(1));
         doAnswer(invocation -> {
             // estamos "dentro" de la ejecucion: un segundo intento no debe solaparse
@@ -137,10 +137,59 @@ class MembershipReminderServiceTest {
         assertThat(service.sendDueReminders()).isEqualTo(1);
 
         assertThat(nestedRun.get()).isZero();
-        assertThat(nestedTrigger.get()).isFalse();
+        assertThat(nestedTrigger.get()).isEqualTo(MembershipReminderService.Trigger.ALREADY_RUNNING);
         // y al terminar el candado queda libre
         pending(student(2));
-        assertThat(service.triggerAsync()).isTrue(); // ejecuta inline (Runnable::run) y devuelve true
+        assertThat(service.triggerAsync()).isEqualTo(MembershipReminderService.Trigger.STARTED);
+    }
+
+    @Test
+    void triggerAsyncReturnsBeforeTheBatchRunsOnTheCallerThread() {
+        List<Runnable> queued = new ArrayList<>();
+        var props = new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(""),
+                new AppProperties.MembershipReminder(true, 2, "0 0 8 * * *", 0),
+                new AppProperties.Registration(72), new AppProperties.RateLimit(10),
+                new AppProperties.BootstrapAdmin(null, null));
+        var deferred = new MembershipReminderService(students, logs, mail, props, CLOCK, queued::add);
+        pending(student(1));
+
+        assertThat(deferred.triggerAsync()).isEqualTo(MembershipReminderService.Trigger.STARTED);
+
+        // M-4: nada se ejecuto en el hilo que llamo; el trabajo quedo en la cola del ejecutor
+        verify(mail, never()).send(anyString(), anyString(), anyString());
+        assertThat(queued).hasSize(1);
+        queued.get(0).run();
+        verify(mail).send(anyString(), anyString(), anyString());
+    }
+
+    @Test
+    void triggerReportsMailNotConfiguredInsteadOfPromisingToStart() {
+        when(mail.isConfigured()).thenReturn(false);
+
+        assertThat(service.triggerAsync()).isEqualTo(MembershipReminderService.Trigger.MAIL_NOT_CONFIGURED);
+    }
+
+    @Test
+    void anInterruptedThreadStopsTheBatchInsteadOfSendingTheRestInABurst() {
+        MembershipReminderService interrupting = new MembershipReminderService(students, logs, mail,
+                new AppProperties("", new AppProperties.Cors(List.of()), new AppProperties.Mail(""),
+                        new AppProperties.MembershipReminder(true, 2, "0 0 8 * * *", 50),
+                        new AppProperties.Registration(72), new AppProperties.RateLimit(10),
+                        new AppProperties.BootstrapAdmin(null, null)), CLOCK, Runnable::run) {
+            @Override
+            void sleep(long millis) {
+                Thread.currentThread().interrupt(); // simula un apagado durante la pausa
+            }
+        };
+        pending(student(1), student(2), student(3));
+
+        try {
+            assertThat(interrupting.sendDueReminders()).as("solo el primero; el resto queda para el proximo ciclo")
+                    .isEqualTo(1);
+        } finally {
+            Thread.interrupted(); // limpia la bandera para no contaminar otros tests
+        }
+        verify(mail, org.mockito.Mockito.times(1)).send(anyString(), anyString(), anyString());
     }
 
     @Test

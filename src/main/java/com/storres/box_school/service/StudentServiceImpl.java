@@ -136,7 +136,7 @@ public class StudentServiceImpl implements StudentService {
     @Override
     @Transactional
     public RegistrationCodeResponse regenerateRegistrationCode(Long id) {
-        Student student = findOrThrow(id);
+        Student student = findOrThrowForUpdate(id); // mismo candado que el pago (N-2)
         if (userRepository.existsByStudentId(id)) {
             throw new UsernameAlreadyExistsException("Este estudiante ya tiene una cuenta activada");
         }

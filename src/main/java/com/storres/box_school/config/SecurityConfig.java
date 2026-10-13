@@ -63,6 +63,8 @@ public class SecurityConfig {
                         // /actuator/health agregado exige autenticacion (auditoria Fase 0, A-3).
                         .requestMatchers("/actuator/health/liveness", "/actuator/health/readiness").permitAll()
                         .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                        // El resto de actuator (incluido el indice y el health agregado): solo administradores
+                        .requestMatchers("/actuator", "/actuator/**").hasRole("ADMIN")
                         // Autoservicio del estudiante autenticado
                         .requestMatchers(HttpMethod.GET, "/api/students/me", "/api/payments/me",
                                 "/api/prices/active", "/api/prices/active/**").authenticated()
@@ -70,12 +72,24 @@ public class SecurityConfig {
                         .requestMatchers("/api/students/**", "/api/payments/**", "/api/prices/**",
                                 "/api/notifications/**").hasRole("ADMIN")
                         .anyRequest().authenticated())
-                .addFilterBefore(new RequestSizeLimitFilter(objectMapper), UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(new RateLimitFilter(props.rateLimit().authRequestsPerMinute(), objectMapper),
                         UsernamePasswordAuthenticationFilter.class)
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    /**
+     * El limite de tamano de cuerpo se registra como filtro de servlet con la MAXIMA prioridad: debe ejecutarse
+     * antes que cualquier otro filtro que pudiera leer el cuerpo (auditoria Fase 0, N-1). No forma parte de la
+     * cadena de Spring Security.
+     */
+    @Bean
+    public FilterRegistrationBean<RequestSizeLimitFilter> requestSizeLimitFilterRegistration() {
+        FilterRegistrationBean<RequestSizeLimitFilter> registration =
+                new FilterRegistrationBean<>(new RequestSizeLimitFilter(objectMapper));
+        registration.setOrder(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
+        return registration;
     }
 
     /** El filtro JWT ya corre dentro de la cadena de Spring Security; evita registrarlo tambien como filtro servlet. */

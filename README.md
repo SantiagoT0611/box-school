@@ -34,13 +34,15 @@ Con el perfil `dev`, Swagger queda en `http://localhost:8080/swagger-ui.html`. S
 Arranca **una vez** con `FLYWAY_BASELINE_ON_MIGRATE=true` (apagado por defecto para no marcar baseline en una base equivocada): Flyway la toma como V1, aplica las migraciones V2–V6 (que además reparan restos que dejaba `ddl-auto=update`) y la app valida el esquema al arrancar. Después quita esa variable. **Haz un respaldo antes** (`pg_dump`) y revisa las consultas previas de `docs/DECISIONS.md` (D-012). Si existe el usuario `admin` / `admin123` que creaba el antiguo seeder, elimínalo o cambia su clave; los administradores nuevos se crean con `BOOTSTRAP_ADMIN_*` (solo si no existe ya ninguno).
 Las variables de correo cambiaron de nombre (`MAIL_HOST` → `SPRING_MAIL_HOST`, etc.) y `LICENSE_REMINDER_CRON` → `REMINDER_CRON`.
 
+**Al actualizar:** los códigos de registro pendientes se invalidan (ahora se guardan con HMAC); regenéralos desde `POST /api/students/{id}/registration-code`.
+
 ## Tests
 
 ```bash
 ./mvnw test
 ```
 
-La mayoría usa H2 en modo PostgreSQL con las mismas migraciones Flyway (no requieren base de datos). `PostgresLegacyUpgradeTest` usa un **PostgreSQL real en Docker** (Testcontainers) para reproducir la actualización de una base heredada y los pagos simultáneos; se omite solo si Docker no está disponible.
+La mayoría usa H2 en modo PostgreSQL con las mismas migraciones Flyway (no requieren base de datos). `PostgresLegacyUpgradeTest` usa un **PostgreSQL real en Docker** (Testcontainers) para reproducir la actualización de una base heredada y los pagos simultáneos; se omite si Docker no está disponible. Para que en vez de omitirse **falle** (CI, o antes de cerrar una fase): `REQUIRE_DOCKER=true ./mvnw test`.
 
 Prueba de punta a punta contra una instancia en marcha (usar una copia de la base: escribe datos de prueba): `scripts/smoke_test.py`.
 

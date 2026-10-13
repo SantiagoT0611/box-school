@@ -15,3 +15,4 @@ springdoc:
 logging:
   level:
     com.storres.box_school: DEBUG
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: WARN

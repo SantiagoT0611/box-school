@@ -36,6 +36,12 @@ spring:
           timeout: 5000
           writetimeout: 5000
 
+  mvc:
+    formcontent:
+      filter:
+        enabled: false   # API solo JSON. OrderedFormContentFilter copiaba a memoria el cuerpo COMPLETO de cualquier
+                         # PUT/PATCH/DELETE form-urlencoded, anonimo y antes de la cadena de seguridad (OOM; auditoria N-1)
+
   data:
     web:
       pageable:
@@ -68,6 +74,12 @@ springdoc:
     enabled: ${SWAGGER_ENABLED:false}
   swagger-ui:
     enabled: ${SWAGGER_ENABLED:false}
+
+logging:
+  level:
+    # Hibernate escribe 'Detail: Key (email)=(...)' (datos personales) en cada violacion de unicidad;
+    # el GlobalExceptionHandler ya registra lo necesario sin valores (auditoria R-6). dev lo vuelve a activar.
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: "OFF"
 
 jwt:
   secret: ${JWT_SECRET}                          # Base64, minimo 32 bytes. Generar con util.GenerateJwtSecret

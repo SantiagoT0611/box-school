@@ -66,16 +66,21 @@ public class MembershipReminderService {
         this.taskExecutor = taskExecutor;
     }
 
+    public enum Trigger { STARTED, ALREADY_RUNNING, MAIL_NOT_CONFIGURED }
+
     /**
      * Dispara el envio en segundo plano y vuelve de inmediato (el lote puede tardar minutos por la pausa
-     * entre correos). @return false si ya hay una ejecucion en curso.
+     * entre correos). El resultado es explicito para no informar "started" cuando no arranco nada (R-4).
      */
-    public boolean triggerAsync() {
+    public Trigger triggerAsync() {
+        if (!mailService.isConfigured()) {
+            return Trigger.MAIL_NOT_CONFIGURED;
+        }
         if (running.get()) {
-            return false;
+            return Trigger.ALREADY_RUNNING;
         }
         taskExecutor.execute(this::sendDueReminders);
-        return true;
+        return Trigger.STARTED;
     }
 
     /** @return cantidad de avisos enviados en esta ejecucion (0 si ya hay otra en curso) */
@@ -110,6 +115,11 @@ public class MembershipReminderService {
                 break;
             }
             for (Student student : batch) {
+                if (Thread.currentThread().isInterrupted()) {
+                    // apagado en curso: no enviar el resto en rafaga (la pausa tambien se interrumpe); R-3
+                    log.warn("Recordatorios interrumpidos: {} enviados, quedan pendientes para el proximo ciclo", sent);
+                    return sent;
+                }
                 afterId = student.getId();
                 if (remind(student, today)) {
                     sent++;

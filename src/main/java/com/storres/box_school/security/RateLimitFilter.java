@@ -55,13 +55,16 @@ public class RateLimitFilter extends OncePerRequestFilter {
      * mismo controlador pero no empezaria por "/api/auth/" (auditoria Fase 0, A-1).
      */
     static boolean isAuthPath(HttpServletRequest request) {
+        String path = requestPath(request);
+        return path.startsWith("/api/auth/") || path.equals("/api/auth");
+    }
+
+    /** Ruta decodificada y normalizada (servletPath + pathInfo): la que ven Spring MVC y Spring Security. */
+    public static String requestPath(HttpServletRequest request) {
         String servletPath = request.getServletPath() == null ? "" : request.getServletPath();
         String pathInfo = request.getPathInfo() == null ? "" : request.getPathInfo();
         String path = servletPath + pathInfo;
-        if (path.isEmpty()) {
-            path = request.getRequestURI(); // contenedores sin servletPath (p. ej. pruebas)
-        }
-        return path.startsWith("/api/auth/") || path.equals("/api/auth");
+        return path.isEmpty() ? request.getRequestURI() : path; // contenedores sin servletPath (pruebas)
     }
 
     @Override

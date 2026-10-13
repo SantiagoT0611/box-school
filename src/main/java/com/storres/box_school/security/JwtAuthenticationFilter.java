@@ -32,6 +32,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private static final Logger log = LoggerFactory.getLogger(JwtAuthenticationFilter.class);
     private static final String BEARER = "Bearer ";
+    private static final long OUTAGE_LOG_INTERVAL_MS = 30_000;
+
+    private final java.util.concurrent.atomic.AtomicLong lastOutageLog = new java.util.concurrent.atomic.AtomicLong();
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
@@ -69,7 +72,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         } catch (DataAccessException e) {
             // Una caida de la BD NO es un token invalido: respondemos 503 para que el cliente no cierre la sesion
             // de todos los usuarios y los monitores vean un 5xx (auditoria Fase 0, M-7).
-            log.error("Base de datos no disponible al validar el token", e);
+            long now = System.currentTimeMillis();
+            if (now - lastOutageLog.get() > OUTAGE_LOG_INTERVAL_MS && lastOutageLog.getAndSet(now) != now) {
+                log.error("Base de datos no disponible al validar el token (se registra como maximo 1 vez cada 30 s)", e);
+            }
             response.setStatus(HttpStatus.SERVICE_UNAVAILABLE.value());
             response.setContentType(MediaType.APPLICATION_JSON_VALUE);
             objectMapper.writeValue(response.getOutputStream(), ApiErrorResponse.of(

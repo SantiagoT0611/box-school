@@ -31,6 +31,9 @@ class SecurityHardeningTest {
     @Autowired
     ObjectMapper mapper;
 
+    @Autowired
+    org.springframework.context.ApplicationContext context;
+
     private final HttpClient client = HttpClient.newHttpClient();
 
     private HttpResponse<String> send(HttpRequest.Builder builder) throws Exception {
@@ -90,6 +93,64 @@ class SecurityHardeningTest {
 
         assertThat(response.statusCode()).as("sin Content-Length se corta la lectura: nunca 200 ni 401")
                 .isIn(400, 413);
+    }
+
+    @Test
+    void formContentFilterIsDisabledAndTheSizeLimitRunsBeforeEverything() {
+        // N-1: OrderedFormContentFilter copiaba en memoria el cuerpo ENTERO de cualquier PUT/PATCH/DELETE
+        // form-urlencoded (anonimo) antes de la cadena de seguridad -> OutOfMemoryError
+        assertThat(context.getBeansOfType(org.springframework.web.filter.FormContentFilter.class)).isEmpty();
+
+        var sizeLimit = context.getBeansOfType(org.springframework.boot.web.servlet.FilterRegistrationBean.class)
+                .values().stream()
+                .filter(r -> r.getFilter() instanceof com.storres.box_school.security.RequestSizeLimitFilter)
+                .findFirst();
+        assertThat(sizeLimit).as("el limite de tamano debe estar registrado como filtro de servlet").isPresent();
+        assertThat(sizeLimit.get().getOrder()).isEqualTo(org.springframework.core.Ordered.HIGHEST_PRECEDENCE);
+    }
+
+    @Test
+    void largeFormPutIsRejectedWith413() throws Exception {
+        String form = "a=" + "x".repeat(2_000_000); // 2 MB, anonimo, ruta cualquiera
+
+        HttpResponse<String> response = send(request("/api/students/1")
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .PUT(HttpRequest.BodyPublishers.ofString(form)));
+
+        assertThat(response.statusCode()).isEqualTo(413);
+    }
+
+    @Test
+    void chunkedBodyMadeOfManySmallFieldsIsCutAtTheLimit() throws Exception {
+        // Sin campos largos: el tope de strings de Jackson no actua, solo el corte del filtro de tamano
+        StringBuilder sb = new StringBuilder("{\"username\":\"nadie\",\"password\":\"x\",\"relleno\":[");
+        for (int i = 0; i < 30_000; i++) {
+            sb.append(i == 0 ? "" : ",").append("\"campo").append(i).append('"');
+        }
+        sb.append("]}"); // ~330 KB en miles de strings cortos
+        byte[] body = sb.toString().getBytes();
+        assertThat(body.length).isGreaterThan(64 * 1024);
+
+        HttpResponse<String> response = send(request("/api/auth/login")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofInputStream(() -> new ByteArrayInputStream(body))));
+
+        assertThat(response.statusCode()).as("sin el corte llegaria al controlador y daria 401").isEqualTo(400);
+    }
+
+    @Test
+    void testsAreHermeticMailIsNeverConfiguredAndMailHealthIsOff() {
+        // M-9: aunque la maquina tenga SPRING_MAIL_HOST, los tests no pueden enviar correo
+        assertThat(context.getBeansOfType(org.springframework.mail.javamail.JavaMailSender.class)).isEmpty();
+        // A-3: el indicador de correo abriria una conexion SMTP por consulta de salud
+        assertThat(context.getEnvironment().getProperty("management.health.mail.enabled", Boolean.class)).isFalse();
+        assertThat(context.getEnvironment().getProperty("app.timezone")).isEqualTo("UTC");
+    }
+
+    @Test
+    void restOfActuatorIsNotPublic() throws Exception {
+        assertThat(send(request("/actuator")).statusCode()).isEqualTo(401);
+        assertThat(send(request("/actuator/health")).statusCode()).isEqualTo(401);
     }
 
     @Test

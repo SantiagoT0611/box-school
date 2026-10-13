@@ -64,6 +64,23 @@ class UnitTests {
         }
 
         @Test
+        void storedHashIsAKeyedHmacNotAPlainSha256AndDependsOnTheSecret() throws Exception {
+            var service = new RegistrationCodeService(fixed, props("", ""), TEST_SECRET);
+            var student = new Student();
+            String code = service.issueFor(student).registrationCode();
+
+            String plainSha256 = java.util.HexFormat.of().formatHex(java.security.MessageDigest.getInstance("SHA-256")
+                    .digest(code.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+            assertThat(student.getRegistrationCodeHash())
+                    .as("un volcado de la BD no debe permitir probar candidatos con SHA-256 sin clave")
+                    .isNotEqualTo(plainSha256);
+
+            var otherSecret = new RegistrationCodeService(fixed, props("", ""),
+                    "b3RyYS1jbGF2ZS1kaXN0aW50YS1wYXJhLWxhLXBydWViYS0wMTIzNDU2Nzg5MDEyMzQ1");
+            assertThat(otherSecret.matches(student, code)).as("con otro secreto el mismo codigo no coincide").isFalse();
+        }
+
+        @Test
         void consumedCodeNoLongerMatches() {
             var service = new RegistrationCodeService(fixed, props("", ""), TEST_SECRET);
             var student = new Student();
