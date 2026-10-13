@@ -46,7 +46,7 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 
 ---
 
-### 🟥 Fase 0 — Verificar en PostgreSQL real *(REABIERTA por la auditoría: 3 hallazgos altos abiertos)*
+### ✅ Fase 0 — Verificar en PostgreSQL real *(CERRADA el 2026-10-12: 0 críticos/altos; informes en `docs/audits/`)*
 **Objetivo:** comprobar lo que H2 no puede (riesgos residuales del informe base).
 
 **Hecho (2026-10-08)** — con respaldo previo (`backups/box-school_antes-de-flyway_*.sql`, fuera del repo) y una copia de la base para las pruebas de escritura:
@@ -96,9 +96,10 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
   - [x] 🔵 R-3 (interrupción corta el lote), R-4 (estado explícito `mail-not-configured`), R-5 (`/actuator/**` solo ADMIN salvo sondas), R-6 (Hibernate sin `Detail: Key (...)`), R-7 (`Locale` en V5), R-8 (zona en blanco = `America/Bogota`), R-9 (`REQUIRE_DOCKER=true` falla si no hay Docker), R-11 (una sola derivación de ruta), R-12 (log de caída de BD ≤ 1 por 30 s).
   - Aceptados y documentados: R-1 (`active_type` solo se mantiene vía entidad: no tocar `prices` por SQL), R-2 (códigos de registro pendientes se invalidan al actualizar: regenerarlos), R-5 resto (`/error` autenticado, `sort` por columna sensible), R-10, B-15.
   - Verificado por mutación (8 mutaciones nuevas, todas detectadas): formcontent activado, sin `@DynamicUpdate`, sin corte chunked, disparo síncrono, V6 sin limpieza, baseline por defecto `true`, health.mail activado, zona por defecto vacía, `toLowerCase()` sin `Locale`.
-- [ ] **Verificación final del auditor** sobre los commits que cierran N-1..N-4 (re-ejecutar sus pruebas de ataque y las 8 mutaciones) antes de marcar la fase como cerrada.
+- [x] **Verificación final del auditor (2026-10-12) → [audits/FASE-0-verificacion-final.md](audits/FASE-0-verificacion-final.md): ✅ APROBADA.** N-1..N-4 cerrados con evidencia, 10/10 mutaciones antes no detectadas ahora fallan, 77/77 con Docker obligatorio. Dejó 3 bajos: **NR-1** (`register` vs `deactivate` dejaba la cuenta habilitada) y **NR-3** (Guard sin vigilar Flyway) corregidos con test (NR-1 determinista y verificado por mutación); **NR-2** (413 sin cabeceras CORS) aceptado → se atiende en la Fase 2 con la excepción de tamaño por ruta para imágenes.
+- **Estado final:** 81 tests, 0 omitidos (`REQUIRE_DOCKER=true`). **Fase 0 cerrada.** Siguiente: Fase 1.
 
-### ⬜ Fase 1 — Recuperar y cambiar contraseña (O-5)
+### ⬜ Fase 1 — Recuperar y cambiar contraseña (O-5) *(siguiente)*
 **Objetivo:** que un estudiante que olvidó su clave pueda recuperarla sin intervención del admin, sin abrir huecos de seguridad.
 
 - [ ] Migración `V7`: tabla `password_reset_tokens` (hash SHA-256, expira a los 30 min, uso único) y columna `users.password_changed_at`.
@@ -122,6 +123,7 @@ Informe: [audits/LINEA-BASE-auditoria-inicial.md](audits/LINEA-BASE-auditoria-in
 - [ ] Refactor: extraer de `PaymentServiceImpl.payMembership` el cálculo de periodo + `findByIdForUpdate` a un `approve(payment)` reutilizable por las tres modalidades.
 
 #### 2b. Zona de pago manual (QR + cuenta) — **se hace primero; no depende de terceros**
+> Arrastra de la Fase 0: excepción de tamaño por ruta para las imágenes (el límite global es 64 KB), cabeceras CORS en 413 (NR-2) e idempotencia de pagos (`reference` UNIQUE / `Idempotency-Key`, M-2).
 - [ ] Admin: `PUT /api/payments/settings` (datos bancarios + subir QR; validar tipo real de imagen y tamaño ≤ 512 KB; guardado en BD por ahora).
 - [ ] Estudiante: `GET /api/payments/bank-info` (datos + QR) y `POST /api/payments/me/transfer-report` (`type`, `reference`, comprobante opcional) → pago `PENDING`.
 - [ ] Admin: `GET /api/payments/pending`, `POST /api/payments/{id}/approve|reject` (con motivo). Aprobar extiende la membresía y avisa por correo al estudiante.

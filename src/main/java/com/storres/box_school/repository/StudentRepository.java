@@ -35,6 +35,11 @@ public interface StudentRepository extends JpaRepository<Student, Long>, JpaSpec
     @Query("select s from Student s where s.id = :id")
     Optional<Student> findByIdForUpdate(@Param("id") Long id);
 
+    /** Igual que {@link #findByIdForUpdate} pero por email (activacion de cuenta). Usar dentro de una transaccion. */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from Student s where s.email = :email")
+    Optional<Student> findByEmailForUpdate(@Param("email") String email);
+
     /**
      * Estudiantes activos que vencen en [from, to] y a los que aun no se les envio este aviso.
      * Paginacion por clave (id > afterId): el resultado cambia mientras se procesa, asi que

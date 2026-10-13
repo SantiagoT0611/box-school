@@ -51,6 +51,8 @@ class PostgresLegacyUpgradeTest {
     @Autowired ObjectMapper json;
     @Autowired JdbcTemplate jdbc;
     @Autowired PasswordEncoder encoder;
+    @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+    com.storres.box_school.service.RegistrationCodeService registrationCodes;
 
     @Test
     void legacySchemaIsRepairedByTheMigrations() {
@@ -223,6 +225,53 @@ class PostgresLegacyUpgradeTest {
         LocalDate after = jdbc.queryForObject("select expiration_date from students where id = ?", LocalDate.class, studentId);
         assertThat(after).as("ninguna edicion de perfil debe revertir la extension de un pago")
                 .isEqualTo(before.plusDays(30L * payments));
+    }
+
+    @Test
+    void registerRacingWithDeactivateNeverLeavesAnEnabledAccountForAnInactiveStudent() throws Exception {
+        // NR-1 (verificacion final), entrelazado DETERMINISTA: register ya leyo al estudiante (ACTIVE) y se detiene
+        // justo antes de crear el usuario; en ese instante se desactiva al estudiante. Sin el bloqueo de fila,
+        // deactivate confirma de inmediato, no encuentra usuario que deshabilitar y register crea despues una
+        // cuenta HABILITADA para un estudiante INACTIVO. Con el bloqueo, deactivate espera a que register termine
+        // y entonces deshabilita la cuenta recien creada.
+        jdbc.update("update users set password = ? where username = 'salito'", encoder.encode(PASSWORD));
+        String admin = login("salito", PASSWORD);
+
+        String email = "nr1@legacy.test";
+        String created = postJson("/api/students", admin, Map.of("firstName", "Reg", "lastName", "Desact",
+                "email", email, "phone", "3001234567"))
+                .andExpect(status().isCreated()).andReturn().getResponse().getContentAsString();
+        long studentId = ((Number) JsonPath.read(created, "$.id")).longValue();
+        String code = JsonPath.read(created, "$.registrationCode");
+
+        java.util.concurrent.CountDownLatch registerHasReadTheStudent = new java.util.concurrent.CountDownLatch(1);
+        org.mockito.Mockito.doAnswer(invocation -> {
+            registerHasReadTheStudent.countDown();
+            Thread.sleep(1500); // ventana en la que se desactiva al estudiante
+            return invocation.callRealMethod();
+        }).when(registrationCodes).matches(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(code));
+
+        Thread register = new Thread(() -> {
+            try {
+                postJson("/api/auth/register", null, Map.of("username", "nr1user", "password", "ClaveSegura123",
+                        "email", email, "registrationCode", code));
+            } catch (Exception ignored) {
+                // el resultado se verifica por el estado final de la base
+            }
+        });
+        register.start();
+        assertThat(registerHasReadTheStudent.await(10, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+
+        mvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders
+                .patch("/api/students/" + studentId + "/deactivate")
+                .header("Authorization", "Bearer " + admin)).andExpect(status().isOk());
+        register.join();
+
+        String statusNow = jdbc.queryForObject("select status from students where id = ?", String.class, studentId);
+        Integer enabledAccounts = jdbc.queryForObject(
+                "select count(*) from users where student_id = ? and enabled = true", Integer.class, studentId);
+        assertThat(statusNow).isEqualTo("INACTIVE");
+        assertThat(enabledAccounts).as("un estudiante INACTIVO no puede tener la cuenta habilitada").isZero();
     }
 
     // ------------------------------------------------------------------ helpers

@@ -60,7 +60,13 @@ public class AuthServiceImpl implements AuthService {
     @Override
     @Transactional
     public AuthResponse register(RegisterRequest request) {
-        Student student = studentRepository.findByEmail(StudentMapper.normalizeEmail(request.getEmail()))
+        // BCrypt (50-100 ms) ANTES de tomar el bloqueo de fila: no se retiene el candado del estudiante mientras
+        // se calcula el hash. Se descarta si el registro termina rechazado.
+        String encodedPassword = passwordEncoder.encode(request.getPassword());
+
+        // Con bloqueo de fila: serializa con deactivate/pagos. Sin el, un estudiante desactivado entre la lectura y
+        // el commit quedaba con la cuenta HABILITADA (re-auditoria final, NR-1).
+        Student student = studentRepository.findByEmailForUpdate(StudentMapper.normalizeEmail(request.getEmail()))
                 .orElseThrow(InvalidRegistrationException::new);
 
         if (student.getStatus() != Status.ACTIVE
@@ -77,7 +83,7 @@ public class AuthServiceImpl implements AuthService {
 
         User user = User.builder()
                 .username(username)
-                .password(passwordEncoder.encode(request.getPassword()))
+                .password(encodedPassword)
                 .role(Roles.ROLE_USER)
                 .enabled(true)
                 .student(student)

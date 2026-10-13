@@ -16,7 +16,7 @@ Sistema de gestión administrativa para una escuela de boxeo: estudiantes con me
 ## Comandos
 
 ```bash
-./mvnw test                      # 77 tests; H2 + migraciones reales; PostgresLegacyUpgradeTest usa PostgreSQL en Docker (Testcontainers; con REQUIRE_DOCKER=true falla si no hay Docker)
+./mvnw test                      # 81 tests; H2 + migraciones reales; PostgresLegacyUpgradeTest usa PostgreSQL en Docker (Testcontainers; con REQUIRE_DOCKER=true falla si no hay Docker)
 ./mvnw spring-boot:run           # requiere variables de entorno: ver .env.example
 ```
 

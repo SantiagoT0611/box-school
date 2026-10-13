@@ -50,14 +50,17 @@ public @interface HermeticTest {
         @Override
         public void initialize(ConfigurableApplicationContext context) {
             ConfigurableEnvironment env = context.getEnvironment();
-            String url = env.getProperty("spring.datasource.url");
-            boolean safe = url == null
-                    || url.startsWith("jdbc:h2:mem:")
-                    || url.startsWith("jdbc:postgresql://localhost")
-                    || url.startsWith("jdbc:postgresql://127.0.0.1");
-            if (!safe) {
-                throw new IllegalStateException("Test no hermetico: la URL del datasource apunta fuera de la maquina "
-                        + "de pruebas. Revisa las variables de entorno SPRING_DATASOURCE_*.");
+            // Flyway puede traer su propia conexion (SPRING_FLYWAY_URL) distinta del datasource: tambien se vigila
+            for (String key : new String[] { "spring.datasource.url", "spring.flyway.url" }) {
+                String url = env.getProperty(key);
+                boolean safe = url == null || url.isBlank()
+                        || url.startsWith("jdbc:h2:mem:")
+                        || url.startsWith("jdbc:postgresql://localhost")
+                        || url.startsWith("jdbc:postgresql://127.0.0.1");
+                if (!safe) {
+                    throw new IllegalStateException("Test no hermetico: '" + key + "' apunta fuera de la maquina de "
+                            + "pruebas. Revisa las variables de entorno SPRING_DATASOURCE_* y SPRING_FLYWAY_*.");
+                }
             }
         }
     }
